@@ -1,0 +1,26 @@
+# Agent configuration. Values can be overridden by environment variables.
+
+ollama:
+  url: "http://ollama:11434"
+  model: "qwen2.5:7b-instruct"
+  timeout_seconds: 120
+
+kubernetes:
+  # Path to the least-privilege kubeconfig mounted read-only into the container.
+  kubeconfig: "/app/kubeconfig"
+  # Default namespace used when the user does not name one.
+  default_namespace: "default"
+
+# The allowlist. Only these (verb, resource) pairs are permitted, all read-only.
+# Anything not listed here is rejected.
+allowlist:
+  - { verb: "get",      resource: "pods" }
+  - { verb: "get",      resource: "nodes" }
+  - { verb: "get",      resource: "services" }
+  - { verb: "get",      resource: "deployments" }
+  - { verb: "get",      resource: "namespaces" }
+  - { verb: "describe", resource: "pod" }
+  - { verb: "describe", resource: "node" }
+  - { verb: "logs",     resource: "pod" }
+  - { verb: "top",      resource: "pods" }
+  - { verb: "top",      resource: "nodes" }

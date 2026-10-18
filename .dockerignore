@@ -1,0 +1,13 @@
+.git
+.gitignore
+README.md
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.md
+.DS_Store
+kubeconfig
+*.log

@@ -1,0 +1,1 @@
+#note: If a folder has no __init__.py, Python treats it as a normal directory, not a Python package, so you can’t import code from it. 
