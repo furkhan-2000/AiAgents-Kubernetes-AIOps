@@ -7,7 +7,7 @@
 # (runs in parallel with the deps stage under BuildKit)
 ############################
 FROM debian:12-slim AS kubectl
-ARG KUBECTL_VERSION=v1.35.10
+ARG KUBECTL_VERSION=v1.36.5
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends curl ca-certificates; \
