@@ -1,0 +1,77 @@
+# Brings up Ollama (brain) + Agent with the two networks and full hardening.
+# Ollama sits on AI-Internal only (no internet). Agent sits on BOTH:
+# AI-Internal to reach Ollama, AI-Agent to reach the cluster.
+#
+# Usage:
+#   export AGENT_TOKEN="$(cat /path/to/token)"
+#   docker compose up -d
+#
+# Note: the model must already be in the ollama volume (pull it once with a
+# temporary bridge connection; the internal network has no internet).
+
+networks:
+  AI-Internal:
+    name: AI-Internal
+    internal: true          # no internet: Ollama is caged here
+  AI-Agent:
+    name: AI-Agent          # can reach the Kubernetes cluster
+
+volumes:
+  ollama:
+    name: ollama            # holds the model; attached to Ollama only
+
+services:
+  ollama:
+    image: ollama/ollama@sha256:adca95a12c2b386a8f9a995e7fa0600e187e3323b5e5522f5a6c3b1ec73eff99
+    container_name: ollama
+    restart: unless-stopped
+    networks: [AI-Internal]           # internal only, 1 NIC
+    ports:
+      - "127.0.0.1:11434:11434"       # localhost only
+    volumes:
+      - ollama:/home/ollama/.ollama
+    environment:
+      HOME: /home/ollama
+      OLLAMA_MODELS: /home/ollama/.ollama/models
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    deploy:
+      resources:
+        limits:
+          memory: 5g
+          cpus: "2"
+
+  agent:
+    build: .
+    image: agent:1.0
+    container_name: agent
+    restart: unless-stopped
+    depends_on: [ollama]
+    networks: [AI-Internal, AI-Agent]   # BOTH networks = 2 NICs
+    ports:
+      - "127.0.0.1:8080:8080"           # localhost only (Nginx sits in front)
+    environment:
+      OLLAMA_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "qwen2.5:7b-instruct"
+      AGENT_TOKEN: "${AGENT_TOKEN}"     # injected from the host/vault, not stored here
+    volumes:
+      - /path/to/kubeconfig:/app/kubeconfig:ro   # least-privilege, read-only
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1"
