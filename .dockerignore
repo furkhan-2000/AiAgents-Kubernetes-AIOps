@@ -1,13 +1,35 @@
+# Keep the build context small and deterministic. Only what the Dockerfile COPYs
+# (config.yaml, app/, requirements.txt) needs to be here.
+
+# vcs / tooling
 .git
 .gitignore
-README.md
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# not needed in the image
+client/
+k8s/
+infra/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .venv/
 venv/
-*.md
-.DS_Store
-kubeconfig
 *.log
+.DS_Store
+
+# secrets must never enter the build context
+.env
+kubeconfig
+*kubeconfig*
+*.key
+*.crt
+*.csr
+*.pem
+
+# exclude docs, but KEEP the brain prompt the image actually needs
+*.md
+!app/OLLAMA_BRAIN.md

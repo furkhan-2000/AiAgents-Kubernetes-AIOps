@@ -3,7 +3,9 @@
 ollama:
   url: "http://ollama:11434"
   model: "qwen2.5:7b-instruct"
-  timeout_seconds: 120
+  # CPU-only inference is slow, especially for the larger investigate prompts.
+  # This is the per-call client timeout; keep it comfortably above warm latency.
+  timeout_seconds: 300
 
 kubernetes:
   # Path to the least-privilege kubeconfig mounted read-only into the container.
@@ -17,9 +19,9 @@ brain:
   system_prompt_file: "/app/OLLAMA_BRAIN.md"
 
 investigation:
-  max_steps: 6               # hard cap on tool calls per investigation
+  max_steps: 5               # hard cap on tool calls per investigation (CPU: fewer = faster)
   max_output_bytes: 8000     # per-tool output truncation (keeps context bounded)
-  loop_timeout_seconds: 90   # wall-clock budget for the whole loop
+  loop_timeout_seconds: 480  # wall-clock budget for the whole loop (CPU 7B is slow)
   # Allowlist of tool NAMES the brain may call. All are read-only (see app/tools.py).
   # Keep in sync with app/tools.py CATALOG and the cluster read-only RBAC role.
   tools:

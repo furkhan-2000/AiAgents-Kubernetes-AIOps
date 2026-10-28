@@ -48,6 +48,8 @@ services:
     environment:
       HOME: /home/ollama
       OLLAMA_MODELS: /home/ollama/.ollama/models
+      # Keep the model resident between requests (no slow cold reloads on CPU).
+      OLLAMA_KEEP_ALIVE: "30m"
     user: "1000:1000"
     read_only: true
     tmpfs:
@@ -56,11 +58,23 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 512
-    mem_limit: 5g
+    # Host: 3 cores, 8.7Gi RAM, NO swap. 7B (Q4) ~5 GB resident + context.
+    # 6g leaves headroom for the 1g agent + OS (no swap = must not overcommit).
+    mem_limit: 6g
+    # 2 of 3 cores for inference; the remaining core serves the agent + OS.
     cpus: 2
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   agent:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: "1.0"
+        VCS_REF: "${GIT_SHA:-unknown}"   # export GIT_SHA=$(git rev-parse --short HEAD) for provenance
     image: agent:1.0
     container_name: agent
     restart: unless-stopped
@@ -88,3 +102,8 @@ services:
     pids_limit: 256
     mem_limit: 1g
     cpus: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

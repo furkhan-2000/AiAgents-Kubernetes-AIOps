@@ -38,6 +38,8 @@ class OllamaClient:
             "system": system,
             "prompt": prompt,
             "stream": False,
+            # Keep the model resident in memory between loop steps. On CPU-only
+            "keep_alive": "30m",
             # Low temperature keeps the model grounded and reduces invention.
             "options": {"temperature": 0.1},
         }
