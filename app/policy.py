@@ -2,7 +2,7 @@
 config are permitted, and all of them are read-only. Everything else is denied.
 The LLM can suggest anything, but nothing runs unless it passes this gate."""
 
-from .schemas import Action
+from .schemas import Action, ToolCall
 
 # Verbs that can ever be allowed. Mutating verbs are hard-blocked here regardless
 # of what the config says, as a second safety net.
@@ -10,7 +10,7 @@ _READ_ONLY_VERBS = {"get", "describe", "logs", "top"}
 
 
 class Policy:
-    def __init__(self, allowlist: list[dict]):
+    def __init__(self, allowlist: list[dict], tools: list[str] | None = None):
         # Build a set of (verb, resource) that are explicitly allowed and read-only.
         self._allowed: set[tuple[str, str]] = set()
         for item in allowlist:
@@ -18,6 +18,22 @@ class Policy:
             resource = str(item.get("resource", "")).lower()
             if verb in _READ_ONLY_VERBS and verb and resource:
                 self._allowed.add((verb, resource))
+
+        # Allowlist of tool NAMES for the investigate loop (read-only tools only).
+        self._tools: set[str] = {str(t).strip() for t in (tools or []) if str(t).strip()}
+
+    def check_tool(self, call: ToolCall) -> tuple[bool, str]:
+        """Gate for the investigate loop. The tool name must be on the allowlist and
+        every argument must be a safe k8s-style value. 'final' is always allowed."""
+        name = (call.tool or "").strip()
+        if name in ("final", "done"):
+            return True, "stop"
+        if name not in self._tools:
+            return False, f"tool '{name}' is not on the allowlist"
+        for field in (call.namespace, call.name):
+            if field and not _is_safe(field):
+                return False, "invalid characters in argument"
+        return True, "allowed"
 
     def check(self, action: Action) -> tuple[bool, str]:
         """Return (allowed, reason)."""

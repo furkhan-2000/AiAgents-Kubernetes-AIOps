@@ -1,0 +1,23 @@
+# Binds the read-only ClusterRole to the agent's identity.
+# LIVE uses client-certificate auth, so the subject is the cert's User (CN=ai-agent).
+# If you switch to ServiceAccount-token auth, swap the subject for the commented block.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-readonly
+  labels:
+    app.kubernetes.io/part-of: aiops-agent
+    access-tier: read-only
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-readonly
+subjects:
+  # Client-certificate identity (CN=ai-agent). This is what LIVE uses.
+  - kind: User
+    name: ai-agent
+    apiGroup: rbac.authorization.k8s.io
+  # Token (ServiceAccount) identity -- uncomment if using SA-token auth instead:
+  # - kind: ServiceAccount
+  #   name: ai-agent
+  #   namespace: default

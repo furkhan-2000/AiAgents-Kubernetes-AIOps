@@ -1,6 +1,18 @@
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
+# Pinned to CVE-patched versions, verified by importing the app and exercising
+# /healthz, /query and /investigate under exactly this set (2026-10-28).
+#
+# fastapi >= 0.116 is REQUIRED for security: 0.115.x caps Starlette < 0.47 and so
+# blocks the fix for CVE-2025-54121 (multipart DoS) plus other Starlette advisories
+# (CVE-2025-62727 and related). 0.162.0 allows Starlette 1.10.0, which is patched.
+fastapi==0.162.0
+starlette==1.10.0          # explicit pin: past CVE-2025-54121 / CVE-2025-62727 et al.
+uvicorn[standard]==0.54.0
+h11==0.16.0                # explicit pin: past CVE-2025-43859 (request smuggling, h11 < 0.15)
 httpx==0.28.1
-pydantic==2.10.3
-pyyaml==6.0.2
+pydantic==2.14.1
+pyyaml==6.0.3
 slowapi==0.1.10
+
+# python-multipart is intentionally NOT a dependency. This agent accepts JSON
+# bodies only (no Form()/File() endpoints), so the multipart parser is never
+# loaded and the python-multipart CVE family does not apply.

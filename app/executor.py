@@ -1,9 +1,21 @@
-"""Runs the approved action as a kubectl command. Arguments are passed as a list
+"""Runs approved actions as kubectl commands. Arguments are passed as a list
 (never a shell string), so there is no shell injection. The kubeconfig points to
-a least-privilege, read-only service account."""
+a least-privilege, read-only service account.
+
+Defence-in-depth: this executor hard-blocks any verb that is not read-only, no
+matter what the caller passes. This is the last wall, below the policy allowlist
+and below the cluster RBAC role."""
 
 import subprocess
 from .schemas import Action
+
+# The ONLY verbs kubectl may ever be invoked with. Anything mutating
+# (patch/create/apply/delete/edit/scale/exec/cp/port-forward/drain/cordon/...) is
+# absent on purpose and rejected below.
+_HARD_READ_ONLY_VERBS = frozenset({
+    "get", "describe", "logs", "top", "events",
+    "api-resources", "explain", "version", "cluster-info",
+})
 
 
 class Executor:
@@ -32,12 +44,28 @@ class Executor:
                 argv.append(action.name)
             argv += ["-n", ns]
 
+        return self._run(argv)
+
+    def run_readonly(self, argv_tail: list[str], timeout: int = 30) -> str:
+        """Run a read-only kubectl built by tools.py. argv_tail is everything after
+        `kubectl --kubeconfig=...`. The first element MUST be a read-only verb or
+        this refuses to run. This is the executor-level safety net for the loop."""
+        if not argv_tail:
+            return "error: empty command"
+        verb = argv_tail[0]
+        if verb not in _HARD_READ_ONLY_VERBS:
+            # Should never happen (tools.py only builds read-only verbs); refuse hard.
+            return f"error: refused non-read-only verb '{verb}'"
+        argv = ["kubectl", f"--kubeconfig={self._kubeconfig}", *argv_tail]
+        return self._run(argv, timeout=timeout)
+
+    def _run(self, argv: list[str], timeout: int = 30) -> str:
         try:
             result = subprocess.run(
                 argv,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=timeout,
                 check=False,
             )
         except subprocess.TimeoutExpired:

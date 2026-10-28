@@ -11,6 +11,31 @@ kubernetes:
   # Default namespace used when the user does not name one.
   default_namespace: "default"
 
+# Investigate loop (/investigate): conversational, multi-step, read-only.
+brain:
+  # Strict anti-hallucination system prompt loaded for the loop.
+  system_prompt_file: "/app/OLLAMA_BRAIN.md"
+
+investigation:
+  max_steps: 6               # hard cap on tool calls per investigation
+  max_output_bytes: 8000     # per-tool output truncation (keeps context bounded)
+  loop_timeout_seconds: 90   # wall-clock budget for the whole loop
+  # Allowlist of tool NAMES the brain may call. All are read-only (see app/tools.py).
+  # Keep in sync with app/tools.py CATALOG and the cluster read-only RBAC role.
+  tools:
+    - list_pods
+    - describe_pod
+    - get_logs
+    - get_events
+    - list_nodes
+    - describe_node
+    - top_pods
+    - top_nodes
+    - list_deployments
+    - describe_deployment
+    - list_services
+    - list_namespaces
+
 # The allowlist. Only these (verb, resource) pairs are permitted, all read-only.
 # Anything not listed here is rejected.
 allowlist:

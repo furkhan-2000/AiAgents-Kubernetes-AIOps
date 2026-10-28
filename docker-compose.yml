@@ -2,23 +2,38 @@
 # Ollama sits on AI-Internal only (no internet). Agent sits on BOTH:
 # AI-Internal to reach Ollama, AI-Agent to reach the cluster.
 #
-# Usage:
-#   export AGENT_TOKEN="$(cat /path/to/token)"
+# Usage (on the AI server):
+#   export AGENT_TOKEN="<shared secret; same value the bastion sends>"
 #   docker compose up -d
 #
-# Note: the model must already be in the ollama volume (pull it once with a
-# temporary bridge connection; the internal network has no internet).
+# Prereqs:
+#   - networks AI-Internal (internal) and AI-Agent exist (created once, out of band)
+#   - the model is already in the `ollama` volume (pulled once via a temporary
+#     bridge; AI-Internal has no internet)
+#   - the agent kubeconfig is at AGENT_KUBECONFIG (default /etc/ai-agent/kubeconfig),
+#     owned by uid 1000, mode 0600 (so the non-root container user can read it)
+#
+# Overridable env (sensible defaults):
+#   AGENT_BIND_IP       host IP the agent is published on (default 192.168.255.30)
+#   AGENT_KUBECONFIG    host path to the read-only kubeconfig (default /etc/ai-agent/kubeconfig)
+#
+# SECURITY TODO: the agent is plain HTTP on :443 today. Put TLS (then mTLS so only
+# the bastion cert connects) in front before production. Never commit the kubeconfig,
+# certs, or AGENT_TOKEN to git.
 
 networks:
+  # Pre-created out of band; referenced here as external so compose reuses them.
   AI-Internal:
     name: AI-Internal
-    internal: true          # no internet: Ollama is caged here
+    external: true          # internal-only net (no internet): Ollama is caged here
   AI-Agent:
-    name: AI-Agent          # can reach the Kubernetes cluster
+    name: AI-Agent
+    external: true          # can reach the Kubernetes cluster / proxy
 
 volumes:
   ollama:
-    name: ollama            # holds the model; attached to Ollama only
+    name: ollama
+    external: true          # holds the model; attached to Ollama only
 
 services:
   ollama:
@@ -52,13 +67,17 @@ services:
     depends_on: [ollama]
     networks: [AI-Internal, AI-Agent]   # BOTH networks = 2 NICs
     ports:
-      - "127.0.0.1:8080:8080"           # localhost only (Nginx sits in front)
+      # Published on the host IP so the bastion can reach it; firewall allows 443
+      # from the bastion only. (Plain HTTP today -> add TLS/mTLS in front.)
+      - "${AGENT_BIND_IP:-192.168.255.30}:443:8080"
     environment:
       OLLAMA_URL: "http://ollama:11434"
       OLLAMA_MODEL: "qwen2.5:7b-instruct"
-      AGENT_TOKEN: "${AGENT_TOKEN}"     # injected from the host/vault, not stored here
+      AGENT_TOKEN: "${AGENT_TOKEN:?set AGENT_TOKEN before compose up}"  # from host/vault, never committed
     volumes:
-      - /path/to/kubeconfig:/app/kubeconfig:ro   # least-privilege, read-only
+      # Read-only, least-privilege kubeconfig (SA/mTLS user = read-only RBAC).
+      # Host file must be owned by uid 1000, mode 0600.
+      - "${AGENT_KUBECONFIG:-/etc/ai-agent/kubeconfig}:/app/kubeconfig:ro"
     user: "1000:1000"
     read_only: true
     tmpfs:

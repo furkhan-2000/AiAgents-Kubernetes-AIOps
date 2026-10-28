@@ -1,0 +1,24 @@
+# NEVER commit secrets or credentials
+*.key
+*.crt
+*.csr
+*.pem
+*.p12
+*.pfx
+kubeconfig
+*kubeconfig*
+agent-kubeconfig.yaml
+.env
+*.token
+token
+psk.key
+server.key
+client.key
+
+# Local/runtime junk
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.DS_Store

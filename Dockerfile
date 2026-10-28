@@ -7,7 +7,7 @@
 # (runs in parallel with the deps stage under BuildKit)
 ############################
 FROM debian:12-slim AS kubectl
-ARG KUBECTL_VERSION=v1.36.5
+ARG KUBECTL_VERSION=v1.34.12   # match the cluster minor (Kind k8s 1.34); keep within +/-1
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends curl ca-certificates; \
@@ -45,6 +45,9 @@ COPY --from=deps    /opt/venv /opt/venv
 WORKDIR /app
 COPY config.yaml .
 COPY app ./app
+# Keep the strict brain system prompt next to config.yaml at /app/OLLAMA_BRAIN.md
+# (the path config.yaml points to). It is also bundled inside ./app for reference.
+COPY app/OLLAMA_BRAIN.md ./OLLAMA_BRAIN.md
 
 # Non-root user.
 RUN useradd -u 1000 -m agent
