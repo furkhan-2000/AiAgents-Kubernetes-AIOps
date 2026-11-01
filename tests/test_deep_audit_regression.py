@@ -135,6 +135,19 @@ def test_dedup_treats_default_namespace_as_same(cfg):
     assert len(ex.calls) == 1
 
 
+def test_redundant_list_pods_after_list_all_is_skipped(cfg):
+    ex = _Exec()
+    # list_all_pods, then model redundantly re-lists namespaces, then final.
+    llm = _LLM([ToolCall(tool="list_all_pods"),
+                ToolCall(tool="list_pods", namespace="kube-system"),
+                ToolCall(tool="list_pods", namespace="prd"),
+                ToolCall(tool="final")])
+    loop = _loop(cfg, llm, ex)
+    res = loop.run("are all pods up", "bastion")
+    # only list_all_pods actually ran; the redundant list_pods calls were skipped
+    assert len(ex.calls) == 1 and len(res.steps) == 1
+
+
 def test_loop_output_is_redacted(cfg):
     ex = _Exec(out="Environment:\n  API_TOKEN: supersecretvalue")
     loop = _loop(cfg, _LLM([ToolCall(tool="list_all_pods")], answer=""), ex)

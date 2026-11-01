@@ -3,6 +3,7 @@ auth -> llm (Ollama) -> policy (allowlist) -> executor (kubectl) -> audit."""
 
 import os
 import threading
+import time
 import yaml
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse
@@ -67,6 +68,36 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _MAX_INFLIGHT = int(_inv_cfg.get("max_concurrent", 2))
 _inflight = threading.BoundedSemaphore(_MAX_INFLIGHT)
 
+# Short-TTL cache for identical investigate questions. Kept SHORT on purpose:
+# cluster state changes, so a long cache could hide a pod that just broke.
+# 0 disables it.
+_CACHE_TTL = int(_inv_cfg.get("cache_ttl_seconds", 30))
+_cache: dict[str, tuple[float, InvestigateResponse]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_get(key: str):
+    if _CACHE_TTL <= 0:
+        return None
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] <= _CACHE_TTL:
+            return hit[1]
+        if hit:
+            _cache.pop(key, None)   # expired
+    return None
+
+
+def _cache_put(key: str, resp: InvestigateResponse) -> None:
+    if _CACHE_TTL <= 0:
+        return
+    with _cache_lock:
+        # Bound the cache so it cannot grow without limit.
+        if len(_cache) > 256:
+            _cache.clear()
+        _cache[key] = (time.monotonic(), resp)
+
 # Bounded timeout for the single /query LLM call (keeps a /query from holding a
 # worker for the full Ollama budget and contending with /investigate).
 _QUERY_TIMEOUT = int(cfg["ollama"].get("query_timeout_seconds", 90))
@@ -123,6 +154,13 @@ def investigate(request: Request, req: InvestigateRequest, caller: str = Depends
     """Conversational, multi-step, read-only investigation. The brain runs several
     read-only tools, then explains in plain English. It never changes the cluster."""
     audit("investigate.received", caller=caller, question=req.q)
+
+    key = req.q.strip().lower()
+    cached = _cache_get(key)
+    if cached is not None:
+        audit("investigate.cache_hit", caller=caller)
+        return cached
+
     if not _inflight.acquire(blocking=False):
         audit("investigate.busy", caller=caller)
         return InvestigateResponse(
@@ -130,6 +168,8 @@ def investigate(request: Request, req: InvestigateRequest, caller: str = Depends
             message="The assistant is busy with other investigations. Please retry shortly.",
         )
     try:
-        return loop.run(req.q, caller)
+        resp = loop.run(req.q, caller)
+        _cache_put(key, resp)
+        return resp
     finally:
         _inflight.release()

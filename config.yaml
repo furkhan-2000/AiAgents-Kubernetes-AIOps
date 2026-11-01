@@ -25,6 +25,7 @@ investigation:
   loop_timeout_seconds: 600  # wall-clock budget for the whole loop (CPU 7B is slow)
   max_concurrent: 2          # max simultaneous investigations (protects the threadpool)
   synth_reserve_seconds: 200 # budget reserved for the final synthesis call (CPU needs it)
+  cache_ttl_seconds: 30      # cache identical questions this long (0=off); short, as cluster state changes
   # Allowlist of tool NAMES the brain may call. All are read-only (see app/tools.py).
   # Keep in sync with app/tools.py CATALOG and the cluster read-only RBAC role.
   tools:

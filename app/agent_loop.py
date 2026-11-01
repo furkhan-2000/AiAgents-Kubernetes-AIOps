@@ -58,6 +58,7 @@ class InvestigateLoop:
         history_parts: list[str] = []
         notes: list[str] = []           # denied/failed attempts, for a useful no-evidence reply
         seen: set[str] = set()          # (tool,args) signatures already executed
+        listed_all = False              # list_all_pods already ran (covers every namespace)
         start = time.monotonic()
 
         for i in range(self._max_steps):
@@ -82,6 +83,17 @@ class InvestigateLoop:
             if call.tool in ("final", "done"):
                 audit("loop.final_requested", caller=caller, steps=len(steps))
                 break
+
+            # Redundancy guard: list_all_pods already returned every namespace's pods,
+            # so a later plain list_pods adds nothing. Skip it (the model sometimes
+            # re-lists each namespace, wasting slow CPU calls).
+            if listed_all and call.tool == "list_pods":
+                audit("loop.redundant", caller=caller, tool=call.tool)
+                history_parts.append(
+                    f"[step {i+1}] list_pods is redundant: list_all_pods already showed "
+                    "every namespace. Inspect a specific pod or answer {\"tool\":\"final\"}."
+                )
+                continue
 
             # 2. Policy gate: tool must be on the allowlist and args must be safe.
             allowed, reason = self._policy.check_tool(call)
@@ -120,6 +132,8 @@ class InvestigateLoop:
             output = self._truncate(_redact(raw))
             audit("loop.tool", caller=caller, tool=call.tool, args=args)
 
+            if call.tool == "list_all_pods":
+                listed_all = True
             steps.append(Step(tool=call.tool, args=args, observation=output))
             history_parts.append(f"[step {i+1}] {call.tool} {args}\n{output}")
 

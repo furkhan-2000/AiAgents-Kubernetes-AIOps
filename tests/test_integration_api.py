@@ -122,6 +122,34 @@ def test_investigate_denies_mutating_tool_end_to_end(client, monkeypatch):
     assert r.status_code == 200 and ran["n"] == 0   # mutating tool never executed
 
 
+def test_investigate_cache_returns_same_without_rerun(client, monkeypatch):
+    if main._CACHE_TTL <= 0:
+        pytest.skip("cache disabled")
+    main._cache.clear()
+    from app.schemas import ToolCall
+    calls = {"plan": 0, "synth": 0}
+    seq = {"q": None}
+    def planner(q, c, h, timeout=None):
+        calls["plan"] += 1
+        return ToolCall(tool="list_all_pods") if calls["plan"] == 1 else ToolCall(tool="final")
+    def synth(q, h, timeout=None):
+        calls["synth"] += 1
+        return "cached answer test"
+    monkeypatch.setattr(main.llm, "next_step", planner)
+    monkeypatch.setattr(main.llm, "synthesize", synth)
+    import subprocess, types
+    monkeypatch.setattr(subprocess, "run",
+        lambda a, **k: types.SimpleNamespace(returncode=0, stdout="x", stderr=""))
+    q = {"q": "cache probe question"}
+    r1 = client.post("/investigate", json=q, headers=AUTH)
+    r2 = client.post("/investigate", json=q, headers=AUTH)
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json() == r2.json()
+    # second call served from cache: synthesis ran only once (not re-invoked)
+    assert calls["synth"] == 1
+    main._cache.clear()
+
+
 def test_no_openapi_exposed(client):
     # docs/openapi disabled to reduce surface.
     assert client.get("/openapi.json").status_code == 404

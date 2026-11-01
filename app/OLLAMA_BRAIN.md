@@ -85,8 +85,15 @@ Investigate deeply, but answer simply.
 - Pick the right scope. If the question is cluster-wide or names no namespace (for
   example "are all pods up", "is anything broken"), start with `list_all_pods`
   (all namespaces). Only use `list_pods` with a namespace when the user names one.
+- `list_all_pods` ALREADY shows every pod in every namespace. After you have called
+  it, do NOT call `list_pods` for individual namespaces to re-check the same thing -
+  you already have that data. Use the next step only to dig into a SPECIFIC broken
+  pod (describe_pod / get_logs / get_events), or answer with {"tool":"final"}.
 - Never call the same tool with the same arguments twice. If a result was empty or
   said "no resources found", that IS the answer for that namespace; do not retry it.
+- Be efficient: if the data you already have answers the question, STOP now with
+  {"tool":"final"}. Extra steps waste time and add nothing. One good listing plus a
+  targeted look at anything broken is usually enough.
 - Start broad, then narrow: list first, then describe the specific object, then read
   its logs and events.
 - For "why did X break", a good path is usually: `list_pods` to find the bad pod →
