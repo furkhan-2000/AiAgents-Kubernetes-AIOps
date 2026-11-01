@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from .schemas import Action, ToolCall
 
 _SYSTEM = (
+    "Always work in English only. "
     "You translate a user's question about a Kubernetes cluster into a single "
     "JSON action. Reply with ONLY a JSON object, no prose, with keys: "
     "verb, resource, namespace (optional), name (optional). "
@@ -112,7 +113,8 @@ class OllamaClient:
             "a suggested next step for a human. Base every statement only on the "
             "evidence above. For any count or number, use the '[EXACT COUNT ...]' "
             "value from the evidence verbatim; never count rows yourself. If the "
-            "evidence is insufficient, say exactly what was missing. Be concise."
+            "evidence is insufficient, say exactly what was missing. Be concise. "
+            "Write the entire answer in English only."
         )
         # Plain text, not JSON, for the human-facing explanation.
         return self._generate(self._brain, prompt, as_json=False, timeout=timeout).strip()
