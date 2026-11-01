@@ -20,8 +20,10 @@ agent and prints the reply.
 # 1. place the client
 sudo install -D -m 0755 ask.py /opt/ai-agent/ask.py
 
-# 2. give each user their token (one file per user, locked down)
-install -D -m 0600 /dev/stdin ~/.config/ai-agent/token <<<'PASTE_THE_AGENT_TOKEN'
+# 2. give each user their token (one file per user, locked down).
+#    Use `read -s` so the token is NOT written to shell history or the screen.
+mkdir -p ~/.config/ai-agent && chmod 700 ~/.config/ai-agent
+( umask 077; read -rs -p 'Paste agent token: ' T && printf '%s' "$T" > ~/.config/ai-agent/token ); echo
 
 # 3. make it a one-word command
 sudo ln -sf /opt/ai-agent/ask.py /usr/local/bin/ask

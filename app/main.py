@@ -49,7 +49,8 @@ _inv_cfg = cfg.get("investigation", {})
 llm = OllamaClient(ollama_url, ollama_model, cfg["ollama"]["timeout_seconds"], brain_prompt)
 policy = Policy(cfg["allowlist"], _inv_cfg.get("tools", []), cfg.get("allowed_namespaces", []))
 executor = Executor(cfg["kubernetes"]["kubeconfig"], cfg["kubernetes"]["default_namespace"])
-loop = InvestigateLoop(llm, policy, executor, cfg["kubernetes"]["default_namespace"], _inv_cfg)
+loop = InvestigateLoop(llm, policy, executor, cfg["kubernetes"]["default_namespace"],
+                       {**_inv_cfg, "call_cap_seconds": cfg["ollama"]["timeout_seconds"]})
 
 app = FastAPI(title="K8s AI Agent", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -65,6 +66,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # threadpool and starve /healthz and /query. Non-blocking: over the cap -> 429.
 _MAX_INFLIGHT = int(_inv_cfg.get("max_concurrent", 2))
 _inflight = threading.BoundedSemaphore(_MAX_INFLIGHT)
+
+# Bounded timeout for the single /query LLM call (keeps a /query from holding a
+# worker for the full Ollama budget and contending with /investigate).
+_QUERY_TIMEOUT = int(cfg["ollama"].get("query_timeout_seconds", 90))
 
 
 @app.exception_handler(RequestValidationError)
@@ -89,8 +94,9 @@ def query(request: Request, req: QueryRequest, caller: str = Depends(verify)) ->
     audit("request.received", caller=caller, question=req.q)
 
     # 1. LLM interprets the question into a structured action (suggestion only).
+    # Bounded timeout so a /query cannot hold a worker for the full Ollama budget.
     try:
-        action = llm.interpret(req.q)
+        action = llm.interpret(req.q, timeout=_QUERY_TIMEOUT)
     except LLMError as exc:
         audit("llm.error", caller=caller, error=str(exc))
         return QueryResponse(allowed=False, message="could not understand the request")

@@ -61,19 +61,32 @@ def _ask(question: str, token: str) -> None:
     )
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
             print("  Access denied. Your token is missing or invalid.\n")
         elif exc.code == 429:
             print("  Too many questions in a short time. Please wait a moment.\n")
+        elif exc.code == 422:
+            print("  Your question was empty or too long. Please shorten it.\n")
         else:
             print(f"  The agent returned an error (HTTP {exc.code}).\n")
         return
     except urllib.error.URLError:
         print("  Could not reach the agent. Check that you are on the bastion and it is up.\n")
         return
+    except KeyboardInterrupt:
+        # Ctrl-C while waiting: abandon this question, return to the prompt cleanly.
+        print("\n  Cancelled.\n")
+        return
+    except (ValueError, OSError):
+        print("  The agent sent an unreadable response. Please try again.\n")
+        return
 
+    if not isinstance(data, dict):
+        print("  The agent sent an unexpected response. Please try again.\n")
+        return
     answer = data.get("answer") or data.get("message") or "(no answer returned)"
     print(f"\n{answer}\n")
 

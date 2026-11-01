@@ -6,6 +6,7 @@ ollama:
   # CPU-only inference is slow, especially for the larger investigate prompts.
   # This is the per-call client timeout; keep it comfortably above warm latency.
   timeout_seconds: 300
+  query_timeout_seconds: 90   # bounded timeout for the single /query LLM call
 
 kubernetes:
   # Path to the least-privilege kubeconfig mounted read-only into the container.
@@ -23,6 +24,7 @@ investigation:
   max_output_bytes: 8000     # per-tool output truncation (keeps context bounded)
   loop_timeout_seconds: 480  # wall-clock budget for the whole loop (CPU 7B is slow)
   max_concurrent: 2          # max simultaneous investigations (protects the threadpool)
+  synth_reserve_seconds: 60  # budget reserved for the final synthesis call
   # Allowlist of tool NAMES the brain may call. All are read-only (see app/tools.py).
   # Keep in sync with app/tools.py CATALOG and the cluster read-only RBAC role.
   tools:

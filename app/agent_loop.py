@@ -28,6 +28,13 @@ class InvestigateLoop:
         self._max_steps = int(limits.get("max_steps", 6))
         self._max_output = int(limits.get("max_output_bytes", 8000))
         self._deadline_s = int(limits.get("loop_timeout_seconds", 90))
+        # Time reserved for the final synthesis call so it is never starved to a
+        # 1-second timeout when the step loop consumes the budget.
+        self._synth_reserve = int(limits.get("synth_reserve_seconds",
+                                             min(60, max(10, self._deadline_s // 4))))
+        # Upper bound for any single model/kubectl call (keeps per-call timeouts from
+        # exceeding the Ollama budget). Defaults to the Ollama per-call timeout.
+        self._call_cap = int(limits.get("call_cap_seconds", 300))
 
     def _truncate(self, text: str) -> str:
         if len(text) <= self._max_output:
@@ -35,8 +42,16 @@ class InvestigateLoop:
         return text[: self._max_output] + "\n...[truncated]"
 
     def _remaining(self, start: float) -> int:
-        """Seconds left in the loop budget, floored at 1 so calls still get a chance."""
-        return max(1, int(self._deadline_s - (time.monotonic() - start)))
+        """Seconds left in the loop budget, floored at 1 so calls still get a chance,
+        capped at the per-call ceiling."""
+        return max(1, min(self._call_cap, int(self._deadline_s - (time.monotonic() - start))))
+
+    def _step_timeout(self, start: float) -> int:
+        """Per-call timeout for a STEP: bounded by the step phase (deadline minus the
+        synthesis reserve) so the reserve is actually preserved, and by the per-call
+        ceiling. Floored at 1."""
+        step_budget = (self._deadline_s - self._synth_reserve) - (time.monotonic() - start)
+        return max(1, min(self._call_cap, int(step_budget)))
 
     def run(self, question: str, caller: str) -> InvestigateResponse:
         steps: list[Step] = []
@@ -46,7 +61,9 @@ class InvestigateLoop:
         start = time.monotonic()
 
         for i in range(self._max_steps):
-            if time.monotonic() - start > self._deadline_s:
+            # Stop stepping once only the synthesis reserve is left, so the final
+            # answer always has time to run (not a starved 1s timeout).
+            if time.monotonic() - start > (self._deadline_s - self._synth_reserve):
                 audit("loop.timeout", caller=caller, steps=len(steps))
                 break
 
@@ -55,7 +72,7 @@ class InvestigateLoop:
             try:
                 call: ToolCall = self._llm.next_step(
                     question, toolmod.CATALOG, "\n\n".join(history_parts),
-                    timeout=self._remaining(start),
+                    timeout=self._step_timeout(start),
                 )
             except LLMError as exc:
                 audit("loop.plan_error", caller=caller, error=str(exc))
@@ -83,9 +100,12 @@ class InvestigateLoop:
                 continue
 
             # Skip a tool+args we already ran: a small model tends to repeat the
-            # same call and waste the step budget. Nudge it toward a new angle.
+            # same call and waste the step budget. Nudge it toward a new angle. The
+            # signature uses the EFFECTIVE namespace so "no namespace" and an
+            # explicit "default" are treated as the same call.
             args = call.model_dump(exclude_none=True, exclude={"tool", "reason"})
-            sig = f"{call.tool}:{sorted(args.items())}"
+            eff_ns = call.namespace or self._default_ns
+            sig = f"{call.tool}|{eff_ns}|{call.name}|{call.container}|{call.tail_lines}|{call.previous}"
             if sig in seen:
                 audit("loop.duplicate", caller=caller, tool=call.tool, args=args)
                 history_parts.append(
@@ -95,7 +115,8 @@ class InvestigateLoop:
                 continue
             seen.add(sig)
 
-            raw = self._executor.run_readonly(argv_tail, timeout=self._remaining(start))
+            # kubectl is quick; cap it at 30s but never above the remaining step budget.
+            raw = self._executor.run_readonly(argv_tail, timeout=min(30, self._step_timeout(start)))
             output = self._truncate(_redact(raw))
             audit("loop.tool", caller=caller, tool=call.tool, args=args)
 
@@ -112,8 +133,11 @@ class InvestigateLoop:
             return InvestigateResponse(allowed=True, answer=msg, steps=steps)
 
         try:
+            # Give synthesis at least its reserved budget even if the loop ran long,
+            # but never exceed the per-call ceiling.
+            synth_timeout = min(self._call_cap, max(self._synth_reserve, self._remaining(start)))
             answer = self._llm.synthesize(
-                question, "\n\n".join(history_parts), timeout=self._remaining(start))
+                question, "\n\n".join(history_parts), timeout=synth_timeout)
         except LLMError as exc:
             audit("loop.synth_error", caller=caller, error=str(exc))
             return InvestigateResponse(
@@ -130,6 +154,10 @@ class InvestigateLoop:
         if not stripped or (stripped.startswith("{") and '"tool"' in stripped):
             audit("loop.synth_nonprose", caller=caller)
             answer = self._fallback_summary(steps)
+
+        # Redact the final answer too: the model could echo a secret-looking string
+        # from the evidence into its prose.
+        answer = _redact(answer)
 
         audit("loop.answer", caller=caller, steps=len(steps))
         return InvestigateResponse(allowed=True, answer=answer, steps=steps)

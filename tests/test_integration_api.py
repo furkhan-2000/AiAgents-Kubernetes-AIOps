@@ -37,7 +37,7 @@ def test_query_oversized_is_422(client):
 
 def test_query_happy_path(client, monkeypatch):
     monkeypatch.setattr(main.llm, "interpret",
-        lambda q: Action(verb="get", resource="pods", namespace="kube-system"))
+        lambda q, timeout=None: Action(verb="get", resource="pods", namespace="kube-system"))
     monkeypatch.setattr(main.executor, "run", lambda a: "NAME READY\npod 1/1")
     r = client.post("/query", json={"q": "pods in kube-system"}, headers=AUTH)
     assert r.status_code == 200
@@ -48,14 +48,14 @@ def test_query_happy_path(client, monkeypatch):
 def test_query_denied_action(client, monkeypatch):
     # LLM suggests a mutating action; policy must deny it end to end.
     monkeypatch.setattr(main.llm, "interpret",
-        lambda q: Action(verb="delete", resource="pods"))
+        lambda q, timeout=None: Action(verb="delete", resource="pods"))
     r = client.post("/query", json={"q": "delete pods"}, headers=AUTH)
     assert r.status_code == 200 and r.json()["allowed"] is False
 
 
 def test_query_llm_failure_is_graceful(client, monkeypatch):
     from app.llm import LLMError
-    def boom(q): raise LLMError("ollama down")
+    def boom(q, timeout=None): raise LLMError("ollama down")
     monkeypatch.setattr(main.llm, "interpret", boom)
     r = client.post("/query", json={"q": "x"}, headers=AUTH)
     assert r.status_code == 200 and r.json()["allowed"] is False
@@ -83,6 +83,45 @@ def test_investigate_oversized_is_422(client):
     assert r.status_code == 422
 
 
+def test_investigate_end_to_end_real_loop(client, monkeypatch):
+    """Exercises the REAL loop + policy + executor read-only + redaction on the HTTP
+    path (only Ollama and kubectl are mocked), not a stubbed loop.run."""
+    import subprocess, types
+    from app.schemas import ToolCall
+
+    seq = [ToolCall(tool="list_all_pods"), ToolCall(tool="final")]
+    monkeypatch.setattr(main.llm, "next_step", lambda q, c, h, timeout=None: seq.pop(0))
+    monkeypatch.setattr(main.llm, "synthesize", lambda q, h, timeout=None: "All pods healthy. token: zzz")
+
+    def fake_run(argv, **kw):
+        # assert the real executor ran a read-only verb with no shell
+        assert kw.get("shell", False) is False and argv[0] == "kubectl"
+        assert "delete" not in argv and "patch" not in argv
+        return types.SimpleNamespace(returncode=0, stdout="ns pod 1/1 Running", stderr="")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    r = client.post("/investigate", json={"q": "are all pods up"}, headers=AUTH)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["allowed"] is True and body["steps"][0]["tool"] == "list_all_pods"
+    assert "zzz" not in body["answer"]   # synthesized secret-looking text redacted? (answer not redacted; see note)
+
+
+def test_investigate_denies_mutating_tool_end_to_end(client, monkeypatch):
+    from app.schemas import ToolCall
+    seq = [ToolCall(tool="delete_pod", name="x"), ToolCall(tool="final")]
+    monkeypatch.setattr(main.llm, "next_step", lambda q, c, h, timeout=None: seq.pop(0))
+    monkeypatch.setattr(main.llm, "synthesize", lambda q, h, timeout=None: "done")
+    import subprocess, types
+    ran = {"n": 0}
+    def fake_run(argv, **kw):
+        ran["n"] += 1
+        return types.SimpleNamespace(returncode=0, stdout="x", stderr="")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    r = client.post("/investigate", json={"q": "delete the pod"}, headers=AUTH)
+    assert r.status_code == 200 and ran["n"] == 0   # mutating tool never executed
+
+
 def test_no_openapi_exposed(client):
     # docs/openapi disabled to reduce surface.
     assert client.get("/openapi.json").status_code == 404
@@ -92,7 +131,7 @@ def test_no_openapi_exposed(client):
 def test_query_out_of_scope_not_answered(client, monkeypatch):
     # chit-chat: interpret returns the out-of-scope sentinel -> denied, no kubectl.
     monkeypatch.setattr(main.llm, "interpret",
-        lambda q: Action(verb="none", resource="none"))
+        lambda q, timeout=None: Action(verb="none", resource="none"))
     ran = {"called": False}
     monkeypatch.setattr(main.executor, "run", lambda a: ran.__setitem__("called", True) or "x")
     r = client.post("/query", json={"q": "hello there"}, headers=AUTH)
@@ -102,7 +141,7 @@ def test_query_out_of_scope_not_answered(client, monkeypatch):
 
 def test_query_describe_deployment_allowed(client, monkeypatch):
     monkeypatch.setattr(main.llm, "interpret",
-        lambda q: Action(verb="describe", resource="deployment", name="payments", namespace="prod"))
+        lambda q, timeout=None: Action(verb="describe", resource="deployment", name="payments", namespace="prod"))
     monkeypatch.setattr(main.executor, "run", lambda a: "Name: payments")
     r = client.post("/query", json={"q": "describe deployment payments"}, headers=AUTH)
     assert r.status_code == 200 and r.json()["allowed"] is True
@@ -117,7 +156,7 @@ def test_malformed_auth_header_rejected(client, header):
 
 def test_query_output_is_redacted(client, monkeypatch):
     monkeypatch.setattr(main.llm, "interpret",
-        lambda q: Action(verb="describe", resource="pod", name="p", namespace="app"))
+        lambda q, timeout=None: Action(verb="describe", resource="pod", name="p", namespace="app"))
     monkeypatch.setattr(main.executor, "run", lambda a: "password: hunter2")
     r = client.post("/query", json={"q": "describe pod p"}, headers=AUTH)
     assert "hunter2" not in r.json()["output"] and "[REDACTED]" in r.json()["output"]
@@ -145,7 +184,7 @@ def test_investigate_busy_returns_message(client, monkeypatch):
 def test_rate_limit_returns_429(client, monkeypatch):
     main.limiter.enabled = True   # autouse fixture disables it; this test needs it
     monkeypatch.setattr(main.llm, "interpret",
-        lambda q: Action(verb="get", resource="pods", namespace="ns"))
+        lambda q, timeout=None: Action(verb="get", resource="pods", namespace="ns"))
     monkeypatch.setattr(main.executor, "run", lambda a: "ok")
     codes = [client.post("/query", json={"q": "pods"}, headers=AUTH).status_code
              for _ in range(15)]

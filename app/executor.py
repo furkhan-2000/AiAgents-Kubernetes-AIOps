@@ -25,6 +25,10 @@ _CLUSTER_SCOPED = frozenset({
     "storageclass", "storageclasses", "sc", "componentstatus", "componentstatuses",
 })
 
+# Hard cap on any single command's output we read/return, so one huge result
+# cannot exhaust the container's memory or feed a giant string to redaction.
+_MAX_OUTPUT_BYTES = 1_000_000
+
 
 class Executor:
     def __init__(self, kubeconfig: str, default_namespace: str):
@@ -63,6 +67,10 @@ class Executor:
             if action.name:
                 argv.append(action.name)
             argv += ["-n", action.namespace or self._default_ns]
+            # Bound logs: last 200 lines, all containers (sidecars), and a hard
+            # byte cap so a huge log cannot be read wholly into the 1g container.
+            argv += ["--tail", "200", "--all-containers=true", "--prefix=true",
+                     "--limit-bytes", str(_MAX_OUTPUT_BYTES)]
 
         return self._run(argv)
 
@@ -97,7 +105,10 @@ class Executor:
 
         if result.returncode != 0:
             return f"error: {result.stderr.strip()}"
-        out = result.stdout.strip()
+        # Hard output cap (defence in depth; logs are already --limit-bytes bounded).
+        out = result.stdout[:_MAX_OUTPUT_BYTES].strip()
+        if len(result.stdout) > _MAX_OUTPUT_BYTES:
+            out += "\n...[truncated]"
         if not out:
             # Success but no stdout: kubectl prints "No resources found..." to
             # stderr. Surface it so the model sees an explicit result, not a blank

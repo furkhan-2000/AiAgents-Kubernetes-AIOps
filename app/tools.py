@@ -54,7 +54,8 @@ def build_argv(call: ToolCall, default_ns: str) -> list[str]:
     if tool == "describe_pod":
         return ["describe", "pod", _needs_name(call), "-n", ns]
     if tool == "get_logs":
-        argv = ["logs", _needs_name(call), "-n", ns, "--tail", str(call.tail_lines or 200)]
+        argv = ["logs", _needs_name(call), "-n", ns, "--tail", str(call.tail_lines or 200),
+                "--limit-bytes", "1000000"]  # bound memory from a huge log stream
         if call.container:
             argv += ["-c", call.container]
         else:

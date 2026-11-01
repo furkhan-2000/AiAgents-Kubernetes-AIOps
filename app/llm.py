@@ -60,9 +60,9 @@ class OllamaClient:
 
     # ----- single-command mode (/query) ---------------------------------------
 
-    def interpret(self, question: str) -> Action:
+    def interpret(self, question: str, timeout: int | None = None) -> Action:
         """Return a validated Action parsed from the model's JSON reply."""
-        raw = self._generate(_SYSTEM, question, as_json=True)
+        raw = self._generate(_SYSTEM, question, as_json=True, timeout=timeout)
         try:
             data = json.loads(raw)
             if not isinstance(data, dict):
