@@ -18,6 +18,7 @@ Config via environment (sensible defaults):
 
 import json
 import os
+import socket
 import sys
 import urllib.request
 import urllib.error
@@ -26,7 +27,8 @@ AGENT_URL = os.environ.get("AGENT_URL", "http://192.168.255.30:443").rstrip("/")
 TOKEN_FILE = os.path.expanduser(
     os.environ.get("AGENT_TOKEN_FILE", "~/.config/ai-agent/token")
 )
-TIMEOUT = int(os.environ.get("AGENT_CLIENT_TIMEOUT", "120"))
+# Investigations run several LLM calls on a CPU model, so allow generous time.
+TIMEOUT = int(os.environ.get("AGENT_CLIENT_TIMEOUT", "420"))
 
 BANNER = (
     "Kubernetes assistant. Ask about the cluster in plain English.\n"
@@ -88,8 +90,16 @@ def _ask(question: str, token: str) -> None:
         else:
             print(f"  The agent returned an error (HTTP {exc.code}).\n")
         return
-    except urllib.error.URLError:
-        print("  Could not reach the agent. Check that you are on the bastion and it is up.\n")
+    except socket.timeout:
+        print("  Still thinking... this question took too long on the CPU model. "
+              "Try a simpler/narrower question, or increase AGENT_CLIENT_TIMEOUT.\n")
+        return
+    except urllib.error.URLError as exc:
+        if isinstance(getattr(exc, "reason", None), socket.timeout):
+            print("  Still thinking... it took too long on the CPU model. "
+                  "Try a narrower question, or raise AGENT_CLIENT_TIMEOUT.\n")
+        else:
+            print("  Could not reach the agent. Check that you are on the bastion and it is up.\n")
         return
     except KeyboardInterrupt:
         # Ctrl-C while waiting: abandon this question, return to the prompt cleanly.
