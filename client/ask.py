@@ -48,10 +48,25 @@ def _load_token() -> str:
     return token
 
 
+# Questions that need multi-step reasoning (logs/events/why) go to /investigate;
+# simple factual lookups go to /query (faster, exact).
+_INVESTIGATE_HINTS = (
+    "why", "what went wrong", "went wrong", "fail", "failed", "crash", "crashing",
+    "broken", "error", "debug", "investigate", "diagnose", "root cause", "logs",
+    "restart", "not working", "issue", "problem",
+)
+
+
+def _route(question: str) -> str:
+    q = question.lower()
+    return "/investigate" if any(h in q for h in _INVESTIGATE_HINTS) else "/query"
+
+
 def _ask(question: str, token: str) -> None:
+    endpoint = _route(question)
     body = json.dumps({"q": question}).encode("utf-8")
     req = urllib.request.Request(
-        f"{AGENT_URL}/investigate",
+        f"{AGENT_URL}{endpoint}",
         data=body,
         method="POST",
         headers={
@@ -87,7 +102,8 @@ def _ask(question: str, token: str) -> None:
     if not isinstance(data, dict):
         print("  The agent sent an unexpected response. Please try again.\n")
         return
-    answer = data.get("answer") or data.get("message") or "(no answer returned)"
+    # /investigate returns "answer"; /query returns "output"; errors use "message".
+    answer = data.get("answer") or data.get("output") or data.get("message") or "(no answer returned)"
     print(f"\n{answer}\n")
 
 

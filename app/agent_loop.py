@@ -17,6 +17,7 @@ from .llm import LLMError
 from . import tools as toolmod
 from .audit import audit
 from .redact import redact as _redact
+from .counts import table_facts
 
 
 class InvestigateLoop:
@@ -130,6 +131,11 @@ class InvestigateLoop:
             # kubectl is quick; cap it at 30s but never above the remaining step budget.
             raw = self._executor.run_readonly(argv_tail, timeout=min(30, self._step_timeout(start)))
             output = self._truncate(_redact(raw))
+            # Ground the model with an EXACT count computed in code (it cannot count
+            # rows reliably). Prepended so the answer cites real numbers.
+            fact = table_facts(output)
+            if fact:
+                output = f"[EXACT COUNT (computed, authoritative): {fact}]\n{output}"
             audit("loop.tool", caller=caller, tool=call.tool, args=args)
 
             if call.tool == "list_all_pods":

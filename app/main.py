@@ -20,6 +20,7 @@ from .executor import Executor
 from .agent_loop import InvestigateLoop
 from .audit import audit
 from .redact import redact
+from .counts import table_facts
 
 
 def _load_config() -> dict:
@@ -143,6 +144,9 @@ def query(request: Request, req: QueryRequest, caller: str = Depends(verify)) ->
     # 3. Execute the approved, read-only action. Redact secret-looking output on
     # this path too (same as the investigate loop).
     output = redact(executor.run(action))
+    fact = table_facts(output)
+    if fact:
+        output = f"[EXACT COUNT: {fact}]\n{output}"
     audit("action.executed", caller=caller, action=action.model_dump())
 
     return QueryResponse(allowed=True, action=action, output=output)

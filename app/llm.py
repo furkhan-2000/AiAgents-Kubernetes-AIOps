@@ -110,8 +110,9 @@ class OllamaClient:
             "JSON, do NOT output a tool call, do NOT use braces. Follow your rules: "
             "what is happening, the most likely cause clearly labelled as likely, and "
             "a suggested next step for a human. Base every statement only on the "
-            "evidence above. If the evidence is insufficient, say exactly what was "
-            "missing. Be concise."
+            "evidence above. For any count or number, use the '[EXACT COUNT ...]' "
+            "value from the evidence verbatim; never count rows yourself. If the "
+            "evidence is insufficient, say exactly what was missing. Be concise."
         )
         # Plain text, not JSON, for the human-facing explanation.
         return self._generate(self._brain, prompt, as_json=False, timeout=timeout).strip()
