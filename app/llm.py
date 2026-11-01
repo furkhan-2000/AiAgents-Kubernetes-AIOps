@@ -43,8 +43,12 @@ class OllamaClient:
             "stream": False,
             # Keep the model resident in memory between loop steps. On CPU-only
             "keep_alive": "30m",
-            # Low temperature keeps the model grounded and reduces invention.
-            "options": {"temperature": 0.1},
+            "options": {
+                "temperature": 0.1,     # grounded, low invention
+                "num_ctx": 8192,        # bound context: fits our prompts, avoids the
+                                        # slow huge-default window on CPU
+                "num_predict": 512,     # cap output length -> much faster CPU generation
+            },
         }
         if as_json:
             payload["format"] = "json"

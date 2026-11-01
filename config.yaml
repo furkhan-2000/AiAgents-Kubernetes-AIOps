@@ -20,11 +20,11 @@ brain:
   system_prompt_file: "/app/OLLAMA_BRAIN.md"
 
 investigation:
-  max_steps: 5               # hard cap on tool calls per investigation (CPU: fewer = faster)
-  max_output_bytes: 8000     # per-tool output truncation (keeps context bounded)
-  loop_timeout_seconds: 480  # wall-clock budget for the whole loop (CPU 7B is slow)
+  max_steps: 4               # hard cap on tool calls per investigation (CPU: fewer = faster)
+  max_output_bytes: 3000     # per-tool output truncation (smaller prompt = faster CPU prefill)
+  loop_timeout_seconds: 600  # wall-clock budget for the whole loop (CPU 7B is slow)
   max_concurrent: 2          # max simultaneous investigations (protects the threadpool)
-  synth_reserve_seconds: 60  # budget reserved for the final synthesis call
+  synth_reserve_seconds: 200 # budget reserved for the final synthesis call (CPU needs it)
   # Allowlist of tool NAMES the brain may call. All are read-only (see app/tools.py).
   # Keep in sync with app/tools.py CATALOG and the cluster read-only RBAC role.
   tools:
