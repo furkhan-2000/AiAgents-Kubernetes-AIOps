@@ -16,7 +16,8 @@ from .schemas import ToolCall
 # Human-readable catalog shown to the LLM so it knows exactly what it may call.
 # Keep descriptions short and literal; the brain is told to use ONLY these.
 CATALOG: dict[str, str] = {
-    "list_pods":          "List pods in a namespace (status, restarts, node). Args: namespace.",
+    "list_all_pods":      "List pods across ALL namespaces (status, restarts). Use this when the question is cluster-wide or no namespace is given. Args: none.",
+    "list_pods":          "List pods in ONE namespace (status, restarts, node). Args: namespace.",
     "describe_pod":       "Full detail + recent events for one pod. Args: namespace, name.",
     "get_logs":           "Logs of one pod. Args: namespace, name, tail_lines, previous.",
     "get_events":         "Recent events in a namespace, newest last. Args: namespace.",
@@ -46,12 +47,20 @@ def build_argv(call: ToolCall, default_ns: str) -> list[str]:
     ns = call.namespace or default_ns
     tool = call.tool
 
+    if tool == "list_all_pods":
+        return ["get", "pods", "--all-namespaces", "-o", "wide"]
     if tool == "list_pods":
         return ["get", "pods", "-n", ns, "-o", "wide"]
     if tool == "describe_pod":
         return ["describe", "pod", _needs_name(call), "-n", ns]
     if tool == "get_logs":
         argv = ["logs", _needs_name(call), "-n", ns, "--tail", str(call.tail_lines or 200)]
+        if call.container:
+            argv += ["-c", call.container]
+        else:
+            # Multi-container pods (sidecars like istio-proxy) otherwise error with
+            # "a container name must be specified". Read them all, prefixed by name.
+            argv += ["--all-containers=true", "--prefix=true"]
         if call.previous:
             argv.append("--previous")
         return argv

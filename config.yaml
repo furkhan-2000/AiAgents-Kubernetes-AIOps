@@ -22,9 +22,11 @@ investigation:
   max_steps: 5               # hard cap on tool calls per investigation (CPU: fewer = faster)
   max_output_bytes: 8000     # per-tool output truncation (keeps context bounded)
   loop_timeout_seconds: 480  # wall-clock budget for the whole loop (CPU 7B is slow)
+  max_concurrent: 2          # max simultaneous investigations (protects the threadpool)
   # Allowlist of tool NAMES the brain may call. All are read-only (see app/tools.py).
   # Keep in sync with app/tools.py CATALOG and the cluster read-only RBAC role.
   tools:
+    - list_all_pods
     - list_pods
     - describe_pod
     - get_logs
@@ -48,6 +50,13 @@ allowlist:
   - { verb: "get",      resource: "namespaces" }
   - { verb: "describe", resource: "pod" }
   - { verb: "describe", resource: "node" }
+  - { verb: "describe", resource: "deployment" }
   - { verb: "logs",     resource: "pod" }
   - { verb: "top",      resource: "pods" }
   - { verb: "top",      resource: "nodes" }
+
+# Optional namespace scope. Empty = any namespace allowed. Set to a list (e.g.
+# ["app", "prod-app"]) to restrict BOTH endpoints to those namespaces only, a
+# least-privilege control that also limits prompt-injection pivots. list_all_pods
+# is exempt (it is cluster-wide by design).
+allowed_namespaces: []

@@ -2,8 +2,11 @@
 auth -> llm (Ollama) -> policy (allowlist) -> executor (kubectl) -> audit."""
 
 import os
+import threading
 import yaml
 from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -15,6 +18,7 @@ from .policy import Policy
 from .executor import Executor
 from .agent_loop import InvestigateLoop
 from .audit import audit
+from .redact import redact
 
 
 def _load_config() -> dict:
@@ -43,7 +47,7 @@ brain_prompt = _load_brain_prompt(cfg)
 _inv_cfg = cfg.get("investigation", {})
 
 llm = OllamaClient(ollama_url, ollama_model, cfg["ollama"]["timeout_seconds"], brain_prompt)
-policy = Policy(cfg["allowlist"], _inv_cfg.get("tools", []))
+policy = Policy(cfg["allowlist"], _inv_cfg.get("tools", []), cfg.get("allowed_namespaces", []))
 executor = Executor(cfg["kubernetes"]["kubeconfig"], cfg["kubernetes"]["default_namespace"])
 loop = InvestigateLoop(llm, policy, executor, cfg["kubernetes"]["default_namespace"], _inv_cfg)
 
@@ -54,6 +58,24 @@ app = FastAPI(title="K8s AI Agent", docs_url=None, redoc_url=None, openapi_url=N
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Global cap on concurrent investigations. Each /investigate can hold a worker for
+# the whole loop budget; without a cap, a handful of concurrent requests (even from
+# several IPs, which the per-IP rate limit does not aggregate) could exhaust the
+# threadpool and starve /healthz and /query. Non-blocking: over the cap -> 429.
+_MAX_INFLIGHT = int(_inv_cfg.get("max_concurrent", 2))
+_inflight = threading.BoundedSemaphore(_MAX_INFLIGHT)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError):
+    # Friendly message instead of the raw pydantic error list (still HTTP 422).
+    return JSONResponse(
+        status_code=422,
+        content={"allowed": False,
+                 "message": "Your question is empty or too long. Please send a short, "
+                            "plain question about the cluster."},
+    )
 
 
 @app.get("/healthz")
@@ -81,8 +103,9 @@ def query(request: Request, req: QueryRequest, caller: str = Depends(verify)) ->
         audit("policy.denied", caller=caller, action=action.model_dump(), reason=reason)
         return QueryResponse(allowed=False, action=action, message=reason)
 
-    # 3. Execute the approved, read-only action.
-    output = executor.run(action)
+    # 3. Execute the approved, read-only action. Redact secret-looking output on
+    # this path too (same as the investigate loop).
+    output = redact(executor.run(action))
     audit("action.executed", caller=caller, action=action.model_dump())
 
     return QueryResponse(allowed=True, action=action, output=output)
@@ -94,4 +117,13 @@ def investigate(request: Request, req: InvestigateRequest, caller: str = Depends
     """Conversational, multi-step, read-only investigation. The brain runs several
     read-only tools, then explains in plain English. It never changes the cluster."""
     audit("investigate.received", caller=caller, question=req.q)
-    return loop.run(req.q, caller)
+    if not _inflight.acquire(blocking=False):
+        audit("investigate.busy", caller=caller)
+        return InvestigateResponse(
+            allowed=False,
+            message="The assistant is busy with other investigations. Please retry shortly.",
+        )
+    try:
+        return loop.run(req.q, caller)
+    finally:
+        _inflight.release()

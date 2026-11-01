@@ -39,6 +39,7 @@ class ToolCall(BaseModel):
     name: str | None = Field(default=None, max_length=253)
     tail_lines: int | None = Field(default=None, ge=1, le=2000, description="for get_logs")
     previous: bool | None = Field(default=None, description="for get_logs: previous container")
+    container: str | None = Field(default=None, max_length=253, description="for get_logs: container name")
     reason: str | None = Field(default=None, max_length=300, description="why this step")
 
 

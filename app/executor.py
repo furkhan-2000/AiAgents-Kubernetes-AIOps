@@ -17,6 +17,14 @@ _HARD_READ_ONLY_VERBS = frozenset({
     "api-resources", "explain", "version", "cluster-info",
 })
 
+# Resources with no namespace. These take neither -n nor --all-namespaces
+# (singular and plural both listed since the model is inconsistent).
+_CLUSTER_SCOPED = frozenset({
+    "node", "nodes", "namespace", "namespaces",
+    "persistentvolume", "persistentvolumes", "pv",
+    "storageclass", "storageclasses", "sc", "componentstatus", "componentstatuses",
+})
+
 
 class Executor:
     def __init__(self, kubeconfig: str, default_namespace: str):
@@ -24,7 +32,9 @@ class Executor:
         self._default_ns = default_namespace
 
     def run(self, action: Action) -> str:
-        ns = action.namespace or self._default_ns
+        # Executor-level read-only wall for the /query path too (not just the loop).
+        if action.verb not in _HARD_READ_ONLY_VERBS:
+            return f"error: refused non-read-only verb '{action.verb}'"
 
         # Build argv explicitly. No shell, no string concatenation of user input.
         argv = ["kubectl", f"--kubeconfig={self._kubeconfig}", action.verb]
@@ -32,17 +42,27 @@ class Executor:
         if action.verb in ("get", "top"):
             argv.append(action.resource)
             if action.name:
-                argv.append(action.name)
-            argv += ["-n", ns]
+                # A specific object: scope to its namespace (default if none given).
+                argv += [action.name, "-n", action.namespace or self._default_ns]
+            elif action.namespace:
+                argv += ["-n", action.namespace]
+            elif (action.resource or "").lower() in _CLUSTER_SCOPED:
+                # Cluster-scoped (e.g. nodes): no namespace flag at all.
+                # (kubectl rejects `top nodes --all-namespaces`.)
+                pass
+            else:
+                # No namespace named on a namespaced list query: show the whole
+                # cluster rather than silently answering for 'default' only.
+                argv.append("--all-namespaces")
         elif action.verb == "describe":
             argv += [action.resource]
             if action.name:
                 argv.append(action.name)
-            argv += ["-n", ns]
+            argv += ["-n", action.namespace or self._default_ns]
         elif action.verb == "logs":
             if action.name:
                 argv.append(action.name)
-            argv += ["-n", ns]
+            argv += ["-n", action.namespace or self._default_ns]
 
         return self._run(argv)
 
@@ -70,7 +90,17 @@ class Executor:
             )
         except subprocess.TimeoutExpired:
             return "error: command timed out"
+        except OSError as exc:
+            # Missing/renamed kubectl, permission denied, etc. Return a clean error
+            # string like every other failure path instead of crashing the request.
+            return f"error: could not run kubectl: {exc}"
 
         if result.returncode != 0:
             return f"error: {result.stderr.strip()}"
-        return result.stdout.strip()
+        out = result.stdout.strip()
+        if not out:
+            # Success but no stdout: kubectl prints "No resources found..." to
+            # stderr. Surface it so the model sees an explicit result, not a blank
+            # (a blank makes it re-run the same tool pointlessly).
+            return result.stderr.strip() or "(no resources found)"
+        return out
