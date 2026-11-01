@@ -58,11 +58,11 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 512
-    # Host: 3 cores, 8.7Gi RAM, NO swap. 7B (Q4) ~5 GB resident + context.
-    # 6g leaves headroom for the 1g agent + OS (no swap = must not overcommit).
-    mem_limit: 6g
-    # 2 of 3 cores for inference; the remaining core serves the agent + OS.
-    cpus: 2
+    # Host: 6 cores, ~11.6Gi RAM, NO swap. 7B (Q4) ~5.5 GB resident + KV cache.
+    # 8g leaves headroom for the 1g agent + OS (no swap = must not overcommit).
+    mem_limit: 8g
+    # 5 of 6 cores for inference (speeds prompt prefill); 1 core for agent + OS.
+    cpus: 5
     logging:
       driver: json-file
       options:

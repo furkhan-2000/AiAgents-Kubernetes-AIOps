@@ -45,8 +45,8 @@ class OllamaClient:
             "keep_alive": "30m",
             "options": {
                 "temperature": 0.1,     # grounded, low invention
-                "num_ctx": 8192,        # bound context: fits our prompts, avoids the
-                                        # slow huge-default window on CPU
+                "num_ctx": 4096,        # smaller context = ~2x faster CPU prefill; our
+                                        # steps are capped so prompts fit
                 "num_predict": 512,     # cap output length -> much faster CPU generation
             },
         }
