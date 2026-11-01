@@ -2,7 +2,7 @@
 
 ollama:
   url: "http://ollama:11434"
-  model: "qwen2.5:7b-instruct-q5_K_M"   # Q5 = more accurate than Q4; fits the 12Gi box
+  model: "qwen2.5:7b-instruct-q5_K_M"   # Q5: higher accuracy (user preference); slower on CPU
   # CPU-only inference is slow, especially for the larger investigate prompts.
   # This is the per-call client timeout; keep it comfortably above warm latency.
   timeout_seconds: 300

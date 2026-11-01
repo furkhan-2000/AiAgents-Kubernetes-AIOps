@@ -27,8 +27,10 @@ AGENT_URL = os.environ.get("AGENT_URL", "http://192.168.255.30:443").rstrip("/")
 TOKEN_FILE = os.path.expanduser(
     os.environ.get("AGENT_TOKEN_FILE", "~/.config/ai-agent/token")
 )
-# Investigations run several LLM calls on a CPU model, so allow generous time.
-TIMEOUT = int(os.environ.get("AGENT_CLIENT_TIMEOUT", "420"))
+# Investigations run several LLM calls on a CPU model, so wait longer than the
+# server's own loop budget (loop_timeout_seconds + synth_reserve ~= 600s) so the
+# client never gives up before the server finishes.
+TIMEOUT = int(os.environ.get("AGENT_CLIENT_TIMEOUT", "660"))
 
 BANNER = (
     "Kubernetes assistant. Ask about the cluster in plain English.\n"
