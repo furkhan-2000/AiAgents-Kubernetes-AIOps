@@ -143,14 +143,24 @@ class InvestigateLoop:
             steps.append(Step(tool=call.tool, args=args, observation=output))
             history_parts.append(f"[step {i+1}] {call.tool} {args}\n{output}")
 
-        # 4. Synthesize the final grounded answer. No evidence -> honest refusal,
-        # including what was attempted so the user has a useful signal.
+        # 4a. Zero steps gathered. This is the correct shape for a read-only REFUSAL
+        # of an action request, or an out-of-scope question. Let the model write the
+        # proper answer (refuse per its rules, or explain) instead of a canned line.
         if not steps:
-            msg = ("I could not gather any evidence for this question. Please rephrase "
-                   "it in terms of the cluster (for example a namespace or a pod name).")
+            canned = ("I could not gather any evidence for this question. Please rephrase "
+                      "it in terms of the cluster (for example a namespace or a pod name).")
             if notes:
-                msg += " I attempted: " + "; ".join(dict.fromkeys(notes)) + "."
-            return InvestigateResponse(allowed=True, answer=msg, steps=steps)
+                canned += " I attempted: " + "; ".join(dict.fromkeys(notes)) + "."
+            history = "\n".join(history_parts) or "(no cluster data was gathered)"
+            try:
+                answer = _redact(self._llm.synthesize(
+                    question, history, timeout=min(self._call_cap, self._synth_reserve)))
+            except LLMError:
+                answer = canned
+            if not answer.strip() or (answer.lstrip().startswith("{") and '"tool"' in answer):
+                answer = canned
+            audit("loop.answer", caller=caller, steps=0)
+            return InvestigateResponse(allowed=True, answer=answer, steps=steps)
 
         try:
             # Give synthesis at least its reserved budget even if the loop ran long,

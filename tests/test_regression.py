@@ -283,6 +283,7 @@ def test_loop_plan_error_continues_not_aborts(cfg):
 def test_loop_missing_name_recovers_with_note(cfg):
     ex = _Exec()
     # describe_pod passes policy (name optional) but build_argv raises -> note + continue
-    loop = _loop(cfg, _LLM([ToolCall(tool="describe_pod", namespace="ns")]), ex)
+    loop = _loop(cfg, _LLM([ToolCall(tool="describe_pod", namespace="ns")], answer="no data gathered"), ex)
     res = loop.run("q", "bastion")
-    assert ex.calls == [] and res.allowed and "describe_pod" in res.answer
+    # build_argv failed (missing name) -> no tool ran, loop recovered without crashing
+    assert ex.calls == [] and res.allowed and res.steps == []

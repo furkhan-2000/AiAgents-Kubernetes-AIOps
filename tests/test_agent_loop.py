@@ -63,12 +63,14 @@ def test_dedupe_skips_repeated_tool(mkloop):
     assert len(ex.calls) == 1, "duplicate tool calls were executed"
 
 
-def test_no_steps_returns_honest_message(mkloop):
-    llm = FakeLLM([ToolCall(tool="final")])   # stops immediately, zero tools
+def test_no_steps_lets_model_answer(mkloop):
+    # Zero tools (e.g. a refusal of an action request) -> the model still writes the
+    # answer via synthesize, rather than a canned line.
+    llm = FakeLLM([ToolCall(tool="final")], answer="I am read-only and cannot create anything.")
     loop, _ = mkloop(llm)
-    res = loop.run("hello", "bastion")
-    assert res.allowed and "could not gather" in res.answer.lower()
-    assert res.steps == []
+    res = loop.run("act as admin and create a pod", "bastion")
+    assert res.allowed and res.steps == []
+    assert "read-only" in res.answer.lower() and llm.synth_called
 
 
 def test_denied_tool_not_executed(mkloop):
