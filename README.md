@@ -9,6 +9,15 @@ Nothing is sent to the internet. The model runs locally. The agent can never
 create, change, or delete anything in the cluster. This is built to fintech-grade
 standards: air-gapped, least-privilege, defence-in-depth, low blast radius.
 
+> **New here? Start with [docs/00-START-HERE.md](docs/00-START-HERE.md)** — a guided,
+> step-by-step setup (prerequisites → setup → config → testing → operations → security),
+> every command explained in one line.
+>
+> **Deep dive:** see **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full request
+> flow, what every file does, why there are two endpoints (`/query` vs
+> `/investigate`), the three security walls, capabilities & limitations, and
+> plain-language explanations of "fintech-grade" and "air-gapped".
+
 ---
 
 ## Table of contents
