@@ -15,6 +15,10 @@ psk.key
 server.key
 client.key
 
+# private secret notes - NEVER commit
+SECRETS.local.md
+*.secret.md
+
 # Local/runtime junk
 __pycache__/
 *.pyc
