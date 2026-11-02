@@ -57,7 +57,8 @@ def _load_token() -> str:
 _INVESTIGATE_HINTS = (
     "why", "what went wrong", "went wrong", "fail", "failed", "crash", "crashing",
     "broken", "error", "debug", "investigate", "diagnose", "root cause", "logs",
-    "restart", "not working", "issue", "problem",
+    "restart", "not working", "issue", "problem", "event", "events", "healthy",
+    "health", "wrong",
 )
 
 

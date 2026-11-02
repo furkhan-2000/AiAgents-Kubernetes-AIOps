@@ -54,6 +54,7 @@ allowlist:
   - { verb: "describe", resource: "pod" }
   - { verb: "describe", resource: "node" }
   - { verb: "describe", resource: "deployment" }
+  - { verb: "get",      resource: "events" }
   - { verb: "logs",     resource: "pod" }
   - { verb: "top",      resource: "pods" }
   - { verb: "top",      resource: "nodes" }
