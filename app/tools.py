@@ -28,6 +28,10 @@ CATALOG: dict[str, str] = {
     "list_deployments":   "List deployments in a namespace (ready/available). Args: namespace.",
     "describe_deployment":"Detail + conditions for one deployment. Args: namespace, name.",
     "list_services":      "List services in a namespace. Args: namespace.",
+    "describe_service":   "Detail for one service (ports, selector). Args: namespace, name.",
+    "get_endpoints":      "Which pods back the services in a namespace (debug 'service unreachable'). Args: namespace.",
+    "get_ingresses":      "List ingresses (external routes/URLs) in a namespace. Args: namespace.",
+    "get_pvcs":           "List persistent volume claims (storage) in a namespace. Args: namespace.",
     "list_namespaces":    "List all namespaces. Args: none.",
 }
 
@@ -81,6 +85,14 @@ def build_argv(call: ToolCall, default_ns: str) -> list[str]:
         return ["describe", "deployment", _needs_name(call), "-n", ns]
     if tool == "list_services":
         return ["get", "services", "-n", ns, "-o", "wide"]
+    if tool == "describe_service":
+        return ["describe", "service", _needs_name(call), "-n", ns]
+    if tool == "get_endpoints":
+        return ["get", "endpoints", "-n", ns, "-o", "wide"]
+    if tool == "get_ingresses":
+        return ["get", "ingresses", "-n", ns]
+    if tool == "get_pvcs":
+        return ["get", "persistentvolumeclaims", "-n", ns]
     if tool == "list_namespaces":
         return ["get", "namespaces"]
 

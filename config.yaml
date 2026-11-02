@@ -41,6 +41,10 @@ investigation:
     - list_deployments
     - describe_deployment
     - list_services
+    - describe_service
+    - get_endpoints
+    - get_ingresses
+    - get_pvcs
     - list_namespaces
 
 # The allowlist. Only these (verb, resource) pairs are permitted, all read-only.
