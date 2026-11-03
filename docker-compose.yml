@@ -34,6 +34,7 @@ volumes:
   ollama:
     name: ollama
     external: true          # holds the model; attached to Ollama only
+  agent_memory:             # RAG memory DB (tool names only, no cluster data)
 
 services:
   ollama:
@@ -92,6 +93,8 @@ services:
       # Read-only, least-privilege kubeconfig (SA/mTLS user = read-only RBAC).
       # Host file must be owned by uid 1000, mode 0600.
       - "${AGENT_KUBECONFIG:-/etc/ai-agent/kubeconfig}:/app/kubeconfig:ro"
+      # Persistent RAG memory DB (tool names only, no cluster data). Writable.
+      - "agent_memory:/app/memory"
     user: "1000:1000"
     read_only: true
     tmpfs:

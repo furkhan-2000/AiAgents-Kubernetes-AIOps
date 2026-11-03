@@ -28,11 +28,27 @@ class LLMError(Exception):
 
 
 class OllamaClient:
-    def __init__(self, url: str, model: str, timeout: int, brain_prompt: str = ""):
+    def __init__(self, url: str, model: str, timeout: int, brain_prompt: str = "",
+                 embed_model: str = "nomic-embed-text"):
         self._url = url.rstrip("/")
         self._model = model
         self._timeout = timeout
         self._brain = brain_prompt  # loaded from OLLAMA_BRAIN.md for the loop
+        self._embed_model = embed_model
+
+    def embed(self, text: str, timeout: int | None = None) -> list[float]:
+        """Return the embedding vector for text (used by RAG memory). Raises on
+        failure; RagMemory wraps this fail-open."""
+        resp = httpx.post(
+            f"{self._url}/api/embeddings",
+            json={"model": self._embed_model, "prompt": text},
+            timeout=timeout or self._timeout,
+        )
+        resp.raise_for_status()
+        vec = resp.json().get("embedding")
+        if not isinstance(vec, list) or not vec:
+            raise LLMError("embedding model returned no vector")
+        return vec
 
     # ----- low-level call ------------------------------------------------------
 

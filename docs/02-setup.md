@@ -15,6 +15,17 @@ flowchart TD
 
 ---
 
+## Step 0 — Get the code on each VM
+The setup commands assume the repo is present. On the **cluster, proxy, AI server,
+and bastion** VMs:
+```bash
+git clone <your-repo-url> ~/AiAgents-Kubernetes-AIOps && cd ~/AiAgents-Kubernetes-AIOps
+```
+> **In plain words:** downloads the project files (configs, compose, client).
+> **Why it matters:** every step below runs files from this folder.
+
+⏱ Whole setup ≈ 45–60 min. Done = `ask` answers a cluster question (Step 9).
+
 ## Step 1 — Cluster VM: create the cluster
 ```bash
 kind create cluster --config k8s/kind-config.yaml   # builds a 3-node Kubernetes
@@ -34,11 +45,28 @@ kubectl auth can-i get secrets --as=ai-agent         # must print: no
 
 ## Step 3 — Cluster VM: create the agent's login (mTLS client cert)
 ```bash
-openssl ecparam -name prime256v1 -genkey -noout -out ai-agent.key   # the agent's private key
-openssl req -new -key ai-agent.key -subj "/CN=ai-agent/O=aiops" -out ai-agent.csr  # a cert request
-# submit ai-agent.csr as a Kubernetes CSR, approve it, extract ai-agent.crt
-kubectl certificate approve ai-agent                 # Kubernetes signs the agent's cert
+# 1. key + CSR (identity CN=ai-agent)
+openssl ecparam -name prime256v1 -genkey -noout -out ai-agent.key
+openssl req -new -key ai-agent.key -subj "/CN=ai-agent/O=aiops" -out ai-agent.csr
+
+# 2. submit it to Kubernetes as a CertificateSigningRequest
+cat <<EOF | kubectl apply -f -
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata: { name: ai-agent }
+spec:
+  request: $(base64 -w0 ai-agent.csr)
+  signerName: kubernetes.io/kube-apiserver-client
+  expirationSeconds: 2592000      # 30 days
+  usages: [ client auth ]
+EOF
+
+# 3. approve + extract the signed cert
+kubectl certificate approve ai-agent
+kubectl get csr ai-agent -o jsonpath='{.status.certificate}' | base64 -d > ai-agent.crt
 ```
+> **You should see:** `kubectl get csr ai-agent` shows `Approved,Issued`, and
+> `ai-agent.crt` is a non-empty file.
 Then build `agent-kubeconfig.yaml` pointing at the **proxy** (`server:
 https://192.168.255.135:6443`, `tls-server-name: 192.168.255.134`) with the CA +
 the cert/key. (See [../ARCHITECTURE.md](../ARCHITECTURE.md) §4 for why the proxy.)
@@ -107,3 +135,10 @@ ask> how many pods are running
 ask> why is the web pod restarting in prd
 ```
 Full test list: [04-testing.md](04-testing.md).
+
+---
+
+## Next: add monitoring
+The agent now works. To see metrics + logs for every VM, set up the observability
+stack → **[07-monitoring.md](07-monitoring.md)** (deploy the monitoring VM, then the
+OTel collector on each VM).

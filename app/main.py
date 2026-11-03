@@ -48,11 +48,44 @@ ollama_model = os.environ.get("OLLAMA_MODEL", cfg["ollama"]["model"])
 brain_prompt = _load_brain_prompt(cfg)
 _inv_cfg = cfg.get("investigation", {})
 
-llm = OllamaClient(ollama_url, ollama_model, cfg["ollama"]["timeout_seconds"], brain_prompt)
+_rag_cfg = cfg.get("rag", {})
+llm = OllamaClient(ollama_url, ollama_model, cfg["ollama"]["timeout_seconds"], brain_prompt,
+                   embed_model=_rag_cfg.get("embed_model", "nomic-embed-text"))
 policy = Policy(cfg["allowlist"], _inv_cfg.get("tools", []), cfg.get("allowed_namespaces", []))
 executor = Executor(cfg["kubernetes"]["kubeconfig"], cfg["kubernetes"]["default_namespace"])
+
+
+def _build_memory():
+    """Build RAG memory, fail-open: any error (missing extension, bad path) -> None,
+    and the agent runs exactly as if RAG were off."""
+    if not _rag_cfg.get("enabled", False):
+        return None
+    try:
+        from .memory import RagMemory
+        from .memory_store import SqliteVecStore
+        store = SqliteVecStore(_rag_cfg.get("db_path", "/app/memory/rag.db"),
+                               dim=int(_rag_cfg.get("embed_dim", 768)))
+        # Bounded embed timeout so a slow embed model can never stall /investigate.
+        et = int(_rag_cfg.get("embed_timeout_seconds", 20))
+        rag = RagMemory(
+            embed_fn=lambda q: llm.embed(q, timeout=et),
+            store=store,
+            allowed_tools=_inv_cfg.get("tools", []),
+            top_k=int(_rag_cfg.get("top_k", 3)),
+            min_similarity=float(_rag_cfg.get("min_similarity", 0.75)),
+            max_rows=int(_rag_cfg.get("max_rows", 5000)),
+        )
+        audit("rag.enabled", db=_rag_cfg.get("db_path", "/app/memory/rag.db"))
+        return rag
+    except Exception as exc:
+        audit("rag.disabled", error=str(exc))
+        return None
+
+
+memory = _build_memory()
 loop = InvestigateLoop(llm, policy, executor, cfg["kubernetes"]["default_namespace"],
-                       {**_inv_cfg, "call_cap_seconds": cfg["ollama"]["timeout_seconds"]})
+                       {**_inv_cfg, "call_cap_seconds": cfg["ollama"]["timeout_seconds"]},
+                       memory=memory)
 
 app = FastAPI(title="K8s AI Agent", docs_url=None, redoc_url=None, openapi_url=None)
 

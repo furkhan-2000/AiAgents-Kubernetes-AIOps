@@ -11,6 +11,7 @@ What you need before setup. Read, then go to [02-setup.md](02-setup.md).
 | AI server | ai-dev | .30 | Docker: the agent + Ollama (the brain) |
 | Reverse proxy | proxy | .135 | nginx L4 passthrough to the cluster |
 | Cluster | cluster | .134 | Kind Kubernetes (k8s 1.34) |
+| Monitoring | monitor | .79 | Prometheus + Loki + Grafana (OTel sink) — needs **≥40 GB disk**, else Loki crashes |
 
 Each VM: 2 vCPU / 4 GB is fine, **except the AI server: 6 vCPU / 12 GB** (the LLM
 is heavy). Static IPs. Ubuntu 24.04.
@@ -34,9 +35,17 @@ curl -fsSL https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64 -o /usr/local/bi
 **Bastion:** just `python3` (for the `ask` client) — already on Ubuntu.
 
 ## Network rules (firewalld, default-deny)
+Agent path:
 - Bastion → AI server: allow TCP **443** only.
 - AI server → proxy: allow TCP **6443** only.
 - Proxy → cluster: allow TCP **6443** only.
+
+Monitoring path (every VM ships metrics/logs to the monitoring VM):
+- Every VM → monitoring (.79): allow TCP **19090** (Prometheus) + **13100** (Loki).
+- Admin → monitoring (.79): allow TCP **12000** (Grafana UI).
+- Note: Docker-published ports bypass firewalld — restrict them with `DOCKER-USER`
+  iptables rules on the monitoring VM (see [07-monitoring.md](07-monitoring.md)).
+
 - Everything else: denied.
 
 ## One secret you will create

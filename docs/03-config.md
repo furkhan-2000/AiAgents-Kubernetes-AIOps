@@ -40,6 +40,21 @@ a value, then redeploy: `docker compose up -d --build`.
 | `AGENT_TOKEN_FILE` | where the token is read from | `~/.config/ai-agent/token` |
 | `AGENT_CLIENT_TIMEOUT` | how long the client waits (must exceed the loop budget) | 660 |
 
+## `config.yaml` — RAG memory (`rag:`, optional, off by default)
+
+| Setting | What it does | Default |
+|---------|--------------|---------|
+| `enabled` | turn RAG memory on/off | false |
+| `embed_model` | local embedding model | nomic-embed-text |
+| `embed_dim` | vector width — must match the embed model | 768 |
+| `embed_timeout_seconds` | max time for one embed call | 20 |
+| `top_k` | how many past cases to consider | 3 |
+| `min_similarity` | ignore matches below this (0–1) | 0.75 |
+| `max_rows` | cap the memory size | 5000 |
+| `db_path` | the memory file (in a volume) | /app/memory/rag.db |
+
+Full guide: [10-rag.md](10-rag.md).
+
 ## Golden rule
 Never add a tool or verb that can **change** the cluster. The allowlist and tools
 are read-only on purpose. See [06-security.md](06-security.md).

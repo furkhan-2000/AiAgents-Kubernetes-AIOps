@@ -21,11 +21,12 @@ from .counts import table_facts
 
 
 class InvestigateLoop:
-    def __init__(self, llm, policy, executor, default_ns: str, limits: dict):
+    def __init__(self, llm, policy, executor, default_ns: str, limits: dict, memory=None):
         self._llm = llm
         self._policy = policy
         self._executor = executor
         self._default_ns = default_ns
+        self._memory = memory          # optional RagMemory; None = RAG off
         self._max_steps = int(limits.get("max_steps", 6))
         self._max_output = int(limits.get("max_output_bytes", 8000))
         self._deadline_s = int(limits.get("loop_timeout_seconds", 90))
@@ -60,7 +61,20 @@ class InvestigateLoop:
         notes: list[str] = []           # denied/failed attempts, for a useful no-evidence reply
         seen: set[str] = set()          # (tool,args) signatures already executed
         listed_all = False              # list_all_pods already ran (covers every namespace)
+        used_tools: list[str] = []      # tools that actually ran (for RAG memory)
         start = time.monotonic()
+
+        # RAG hint: tool NAMES that worked for similar past questions. Only names,
+        # never past free-text, so a poisoned memory cannot inject a prompt. The
+        # policy gate still validates every tool, so this can never escalate. The
+        # hint is given ONLY to the planner (next_step), never to synthesis or the
+        # no-evidence path, so it never masquerades as gathered evidence.
+        hint_line = ""
+        if self._memory is not None:
+            hint = self._memory.recall(question)
+            if hint:
+                hint_line = ("[hint] similar past questions were answered using these "
+                             "read-only tools (use only if relevant): " + ", ".join(hint))
 
         for i in range(self._max_steps):
             # Stop stepping once only the synthesis reserve is left, so the final
@@ -72,8 +86,10 @@ class InvestigateLoop:
             # 1. Brain picks the next tool (or decides to stop). A transient parse
             # hiccup wastes one step (continue), it does not kill the investigation.
             try:
+                # Prepend the RAG hint to the planner's view only (not stored).
+                plan_history = "\n\n".join(([hint_line] if hint_line else []) + history_parts)
                 call: ToolCall = self._llm.next_step(
-                    question, toolmod.CATALOG, "\n\n".join(history_parts),
+                    question, toolmod.CATALOG, plan_history,
                     timeout=self._step_timeout(start),
                 )
             except LLMError as exc:
@@ -140,6 +156,7 @@ class InvestigateLoop:
 
             if call.tool == "list_all_pods":
                 listed_all = True
+            used_tools.append(call.tool)
             steps.append(Step(tool=call.tool, args=args, observation=output))
             history_parts.append(f"[step {i+1}] {call.tool} {args}\n{output}")
 
@@ -188,6 +205,11 @@ class InvestigateLoop:
         # Redact the final answer too: the model could echo a secret-looking string
         # from the evidence into its prose.
         answer = _redact(answer)
+
+        # Remember this VERIFIED-GOOD case: the question + the tools that produced a
+        # real answer. Stores tool names only (no data), fail-open.
+        if self._memory is not None and used_tools:
+            self._memory.remember(question, used_tools)
 
         audit("loop.answer", caller=caller, steps=len(steps))
         return InvestigateResponse(allowed=True, answer=answer, steps=steps)

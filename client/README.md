@@ -51,7 +51,7 @@ Environment variables, with defaults:
 |----------|---------|---------|
 | `AGENT_URL` | `http://192.168.255.30:443` | Agent endpoint (HTTP today; HTTPS after TLS hardening). |
 | `AGENT_TOKEN_FILE` | `~/.config/ai-agent/token` | Where the per-user token is read from. |
-| `AGENT_CLIENT_TIMEOUT` | `120` | Seconds to wait for an answer. |
+| `AGENT_CLIENT_TIMEOUT` | `660` | Seconds to wait (must exceed the server loop budget). |
 
 ## Example
 

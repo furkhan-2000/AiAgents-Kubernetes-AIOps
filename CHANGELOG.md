@@ -2,6 +2,17 @@
 
 What changed, newest first. Dates are when the work landed.
 
+## 2026-11-03 — RAG memory (optional, off by default)
+- Added RAG memory: remembers which read-only tools answered similar past questions
+  and suggests them, to make the weak CPU model more consistent.
+- Security-hardened: stores tool NAMES only (no cluster data/secrets), no free-text
+  re-injected (no prompt-injection surface), allowlist-gated, similarity threshold,
+  size cap, fully fail-open; the three walls still gate every tool.
+- Files: `app/memory.py`, `app/memory_store.py` (sqlite-vec), `llm.embed()`, wired
+  into the investigate loop; `config.yaml rag:` block; `agent_memory` volume.
+- Data never goes stale: stores the method, runs tools live every time.
+- Docs: `10-rag.md`. Tests: +11 (186 total, all green).
+
 ## 2026-11-03 — Monitoring + docs
 - Added full observability stack: OTel collectors on every VM → Prometheus + Loki +
   Grafana on a dedicated monitoring VM (offline, digest-pinned, hardened).

@@ -56,8 +56,8 @@ COPY config.yaml .
 COPY app/OLLAMA_BRAIN.md ./OLLAMA_BRAIN.md
 COPY app ./app
 
-# Non-root user.
-RUN useradd -u 1000 -m agent
+# Non-root user + writable dir for the RAG memory DB (mounted as a volume at runtime).
+RUN useradd -u 1000 -m agent && mkdir -p /app/memory && chown 1000:1000 /app/memory
 USER 1000:1000
 
 EXPOSE 8080

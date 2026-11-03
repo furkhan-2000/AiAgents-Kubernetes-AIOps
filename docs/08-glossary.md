@@ -29,6 +29,9 @@ Plain-English meaning of every term used in these docs.
 | **PromQL** | The query language for Prometheus (e.g. `system_memory_usage_bytes`). |
 | **Policy** | The agent's safety gate (`policy.py`) that allows/denies each request. |
 | **Proxy (L4)** | Passes network traffic through untouched (keeps the secure login intact). |
+| **RAG** | Memory of which read-only tools answered past questions; suggests them for similar new ones (consistency, not training). |
+| **Embedding** | Turning text into numbers (a vector) that capture its meaning, so similar questions match. |
+| **Vector DB** | Stores those number-vectors and finds the closest ones (here: sqlite-vec, one file). |
 | **RBAC** | Kubernetes permissions. Ours grants read-only, never secrets. |
 | **remote-write** | How the collector pushes metrics into Prometheus. |
 | **Redaction** | Masking secret-looking text (passwords, tokens) before it's shown. |

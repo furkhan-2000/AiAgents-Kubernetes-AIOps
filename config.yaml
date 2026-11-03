@@ -47,6 +47,19 @@ investigation:
     - get_pvcs
     - list_namespaces
 
+# RAG memory (/investigate): remembers which READ-ONLY TOOLS answered similar past
+# questions and suggests them, to make the weak model more consistent. Stores tool
+# NAMES only (never data). Fail-open: any error = runs as if RAG is off.
+rag:
+  enabled: false             # turn on after pulling the embed model (see docs)
+  embed_model: "nomic-embed-text"
+  embed_dim: 768             # MUST match the embed model's output width
+  embed_timeout_seconds: 20  # bounded so a slow embed can't stall /investigate
+  db_path: "/app/memory/rag.db"
+  top_k: 3
+  min_similarity: 0.75       # only use matches above this cosine similarity
+  max_rows: 5000             # bound the store size
+
 # The allowlist. Only these (verb, resource) pairs are permitted, all read-only.
 # Anything not listed here is rejected.
 allowlist:

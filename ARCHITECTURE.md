@@ -68,6 +68,14 @@ redundant** re-listing after `list_all_pods`, **reserve time** for the final
 answer, **cap** output size and total time, and fall back to an honest message if
 it gathers nothing.
 
+**Optional RAG memory** (`app/memory.py`, off by default): before planning, the loop
+recalls the **tool names** that worked for similar past questions and adds them as a
+hint; after a good answer it remembers the question + tools used. It stores **tool
+names only** (never data), re-injects **no free-text** (no injection surface), is
+**allowlist-gated** and **fail-open**, and the three walls still gate every tool — so
+it improves consistency without ever going stale or escalating privilege. See
+[docs/10-rag.md](docs/10-rag.md).
+
 ---
 
 ## 4. Every file and its job

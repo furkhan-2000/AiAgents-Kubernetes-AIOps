@@ -12,6 +12,7 @@ httpx==0.28.1
 pydantic==2.14.1
 pyyaml==6.0.3
 slowapi==0.1.10
+sqlite-vec==0.1.6          # tiny on-disk vector store for RAG memory (optional)
 
 # python-multipart is intentionally NOT a dependency. This agent accepts JSON
 # bodies only (no Form()/File() endpoints), so the multipart parser is never

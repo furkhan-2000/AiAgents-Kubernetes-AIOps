@@ -13,6 +13,7 @@ Each guide is short. Every command has a one-line "what it does".
 7. **[07-monitoring.md](07-monitoring.md)** — metrics + logs for all VMs (Prometheus/Loki/Grafana + OTel).
 8. **[08-glossary.md](08-glossary.md)** — every term in plain English.
 9. **[09-faq.md](09-faq.md)** — "I see X → do Y" troubleshooting (check here when stuck).
+10. **[10-rag.md](10-rag.md)** — optional memory that makes the model more consistent (how + why + secure).
 
 For the full "how it works" deep dive, see **[../ARCHITECTURE.md](../ARCHITECTURE.md)**.
 History of changes: **[../CHANGELOG.md](../CHANGELOG.md)**.

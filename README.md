@@ -26,7 +26,7 @@ standards: air-gapped, least-privilege, defence-in-depth, low blast radius.
 2. [The big picture (network flow)](#2-the-big-picture-network-flow)
 3. [The request flow (inside the agent)](#3-the-request-flow-inside-the-agent)
 4. [Security gates (every wall a request must pass)](#4-security-gates-every-wall-a-request-must-pass)
-5. [The two-wall safety model](#5-the-two-wall-safety-model-why-rbac-and-the-allowlist)
+5. [The three-wall safety model](#5-the-three-wall-safety-model)
 6. [Infrastructure map (every VM)](#6-infrastructure-map-every-vm)
 7. [Repository layout](#7-repository-layout)
 8. [Setup from scratch](#8-setup-from-scratch)
@@ -142,7 +142,7 @@ auditable.
   POST /query  {"q": "how many pods in kube-system"}
         |
         v
-  [1] auth.py      check Bearer token. Fail-closed. Wrong/missing -> 401, stop.
+  [1] auth.py      check Bearer token. Fail-closed. Missing -> 401, wrong -> 403, stop.
         |
         v
   [2] llm.py       send the question to Ollama. Get back strict JSON:
@@ -202,7 +202,9 @@ root filesystem, all Linux capabilities dropped, no-new-privileges, tmpfs for
 
 ---
 
-## 5. The two-wall safety model (why RBAC AND the allowlist)
+## 5. The three-wall safety model
+
+Three independent walls: **policy allowlist → executor read-only verb check → cluster RBAC**. All three must fail for any write, and no write-capable tool exists at all.
 
 The Python allowlist (`policy.py`) and the Kubernetes RBAC role are two independent
 walls. We keep both on purpose.
@@ -239,6 +241,7 @@ Test environment on VMware, subnet `192.168.255.0/24`.
 | AI server       | ai-dev   | 192.168.255.30  | Docker host. Runs `agent` + `ollama`. firewalld drop zone; only SSH + 443 from bastion. |
 | Reverse proxy   | proxy    | 192.168.255.135 | nginx L4 stream, 6443 passthrough to the cluster. 6443 allowed only from AI server. |
 | Kind cluster    | cluster  | 192.168.255.134 | Kind v0.30, k8s 1.34.0. Read-only RBAC. API on 6443. Must be a static IP. |
+| Monitoring      | monitor  | 192.168.255.79  | Prometheus + Loki + Grafana (OTel sink). ≥40 GB disk. See [docs/07-monitoring.md](docs/07-monitoring.md). |
 
 Notes:
 - The AI server is deliberately **not** a VPN client. It is firewall-locked to the
@@ -273,6 +276,10 @@ AiAgents-Kubernetes-AIOps/
     executor.py              # runs kubectl as argv; hard read-only verb check
     tools.py                 # read-only tool registry for the investigate loop
     agent_loop.py            # bounded think-act-observe loop (hard caps)
+    counts.py                # exact counts computed in code (not by the LLM)
+    redact.py                # mask secret-looking output (both paths), ReDoS-safe
+    memory.py                # optional RAG memory (recall/remember, fail-open)
+    memory_store.py          # sqlite-vec vector store for RAG
     audit.py                 # JSON audit line to stdout
     schemas.py               # pydantic request/response/action/tool shapes
     OLLAMA_BRAIN.md          # strict brain system prompt (no hallucination)
@@ -432,8 +439,10 @@ An empty result for "how many pods" in the default namespace is correct, the sys
 pods live in kube-system.
 
 Current state: the agent speaks plain HTTP on port 443 (TLS is the next hardening
-step). It understands single read-only commands, defaults to `-n default`, and does
-not yet support all-namespaces (`-A`).
+step). A bare list query with no namespace defaults to **all namespaces**
+(cluster-wide); `default_namespace` applies only to named-object / describe / logs
+calls. Both `/query` (single command) and `/investigate` (multi-step loop) are
+live.
 
 ---
 
@@ -477,10 +486,11 @@ In priority order. Items above the line are the near-term work.
 Client certs cannot be revoked in Kubernetes (there is no CRL), so the mitigation is
 to keep them short-lived and rotate them, and to protect the key (mode 600).
 
-Designed but not yet built: an investigate/analyse ReAct loop that upgrades the
-agent from one command to a bounded think-act-observe loop (max ~5 read-only tool
-calls, size and time caps) and has the LLM synthesise a root cause and suggested fix
-as **text only**. It stays read-only, RBAC-bound, and fully audited.
+Built (shipped): the investigate/analyse loop (`/investigate`) — a bounded
+think-act-observe loop (read-only tool calls, size and time caps) that synthesises a
+root cause and suggested fix as text only. Also shipped: deterministic counts,
+secret redaction, optional RAG memory. See [CHANGELOG.md](CHANGELOG.md) for the full
+list. Remaining backlog is the TLS/mTLS + Vault + SIEM items above.
 
 ---
 
