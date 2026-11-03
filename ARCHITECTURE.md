@@ -180,7 +180,41 @@ slower. For a fintech cluster, privacy and control are worth that cost.
 
 ---
 
-## 10. Where this is heading (planned, not built)
+## 10. Observability layer (built)
+
+Separate from the agent, every VM runs a lightweight **OpenTelemetry Collector**
+that ships **metrics + logs** to one **monitoring VM** (Prometheus + Loki +
+Grafana). Fully offline.
+
+```mermaid
+flowchart LR
+    subgraph each["Each VM"]
+      HM["hostmetrics<br/>(VM CPU/RAM/disk/net)"]
+      DS["docker_stats<br/>(container CPU/RAM)"]
+      FL["filelog<br/>(syslog + container logs)"]
+      HM & DS & FL --> COL["OTel Collector<br/>(non-root)"]
+    end
+    COL -->|remote-write| PR[("Prometheus<br/>metrics")]
+    COL -->|OTLP| LK[("Loki<br/>logs")]
+    PR --> GR["Grafana"]
+    LK --> GR
+```
+
+- **Metrics** → Prometheus (`system_*` host metrics, `container_*` container metrics).
+  The collector sets `resource_to_telemetry_conversion` so every series carries a
+  `host_name` label (otherwise all VMs merge).
+- **Logs** → Loki (`service_name` label; filter by host/keyword in Grafana).
+- **Dashboards** → owned, versioned in git, not imported from the internet.
+- **Alerting** → Grafana built-in (its own Alertmanager); a webhook contact point
+  is the future bridge to **n8n** for automated response.
+- **Security** → collectors run non-root (`adm` group for logs, least privilege);
+  the monitoring stack is digest-pinned, hardened, bound to the LAN IP, and never
+  reaches the internet.
+
+Full runbook: **[docs/07-monitoring.md](docs/07-monitoring.md)**. Stack files:
+`infra/monitoring/`.
+
+## 11. Where this is heading (planned, not built)
 
 Same safe pattern, extended into a full offline AIOps platform:
 `Prometheus/Alertmanager (detect, real-time) → n8n (act, human-approved) → this

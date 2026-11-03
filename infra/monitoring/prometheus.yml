@@ -1,0 +1,5 @@
+# Minimal Prometheus config. It receives metrics via remote-write from the OTel
+# collectors (enabled by --web.enable-remote-write-receiver), so no scrape_configs
+# are needed here.
+global:
+  scrape_interval: 15s

@@ -1,0 +1,62 @@
+# Monitoring stack for the monitoring VM: Prometheus + Loki + Grafana.
+# Hardened + digest-pinned. Deploy in ~/monitor/ with prometheus.yml and .env.
+# Ports are bound to the LAN IP (edit 192.168.255.79 to your monitoring VM IP).
+# See docs/07-monitoring.md for the full runbook.
+services:
+  prometheus:
+    image: prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2  # v3.15.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-remote-write-receiver"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "prom:/prometheus"
+    ports: ["192.168.255.79:19090:9090"]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    cpus: 1
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  loki:
+    image: grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28  # 3.7.9
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports: ["192.168.255.79:13100:3100"]
+    volumes: ["loki:/loki"]
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    cpus: 1
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  grafana:
+    image: grafana/grafana@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205  # 13.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?set it in .env}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes: ["grafana:/var/lib/grafana"]
+    ports: ["192.168.255.79:12000:3000"]
+    user: "472:472"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 1
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes: { prom: {}, loki: {}, grafana: {} }

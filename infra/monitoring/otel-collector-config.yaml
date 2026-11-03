@@ -1,0 +1,34 @@
+# OTel Collector config for EACH VM -> /etc/otelcol-contrib/config.yaml
+# Collects host metrics + container stats + logs, ships to the monitoring VM.
+# On VMs without Docker (bastion, proxy): delete the docker_stats receiver and
+# remove it from the metrics pipeline. See docs/07-monitoring.md.
+receivers:
+  hostmetrics:
+    collection_interval: 15s
+    scrapers: { cpu: {}, memory: {}, disk: {}, filesystem: {}, load: {}, network: {}, paging: {} }
+  docker_stats:
+    endpoint: "unix:///var/run/docker.sock"
+    collection_interval: 15s
+    metrics:
+      container.cpu.utilization: { enabled: true }
+      container.memory.usage.total: { enabled: true }
+  filelog:
+    include: [ /var/log/syslog, /var/lib/docker/containers/*/*-json.log ]
+    start_at: end
+
+processors:
+  resourcedetection: { detectors: [system] }
+  batch: {}
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "http://monitoring.internal:19090/api/v1/write"
+    resource_to_telemetry_conversion:
+      enabled: true          # adds host_name (and other resource attrs) as labels
+  otlphttp/loki:
+    endpoint: "http://monitoring.internal:13100/otlp"
+
+service:
+  pipelines:
+    metrics: { receivers: [hostmetrics, docker_stats], processors: [resourcedetection, batch], exporters: [prometheusremotewrite] }
+    logs:    { receivers: [filelog],                   processors: [resourcedetection, batch], exporters: [otlphttp/loki] }
