@@ -68,6 +68,12 @@ allowlist:
   - { verb: "get",      resource: "services" }
   - { verb: "get",      resource: "deployments" }
   - { verb: "get",      resource: "namespaces" }
+  - { verb: "get",      resource: "persistentvolumeclaims" }
+  - { verb: "get",      resource: "persistentvolumes" }
+  - { verb: "get",      resource: "pvc" }
+  - { verb: "get",      resource: "pv" }
+  - { verb: "get",      resource: "ingresses" }
+  - { verb: "get",      resource: "endpoints" }
   - { verb: "describe", resource: "pod" }
   - { verb: "describe", resource: "node" }
   - { verb: "describe", resource: "deployment" }
