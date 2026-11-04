@@ -59,6 +59,21 @@ rag:
   top_k: 3
   min_similarity: 0.75       # only use matches above this cosine similarity
   max_rows: 5000             # bound the store size
+  # Pre-seed: good question->tools examples loaded ONCE when the DB is empty, so RAG
+  # helps from the first question. Tools must be read-only allowlist names.
+  seed:
+    - { q: "are all pods up and running", tools: [list_all_pods] }
+    - { q: "how many pods are running", tools: [list_all_pods] }
+    - { q: "pods in a namespace", tools: [list_pods] }
+    - { q: "why is a pod restarting or crashing", tools: [list_all_pods, describe_pod, get_logs] }
+    - { q: "what is wrong with a pod", tools: [describe_pod, get_logs, get_events] }
+    - { q: "events in a namespace", tools: [get_events] }
+    - { q: "node cpu and memory usage", tools: [top_nodes, list_nodes] }
+    - { q: "why is a service unreachable", tools: [list_services, get_endpoints] }
+    - { q: "storage and persistent volume claims", tools: [get_pvcs] }
+    - { q: "is a deployment ready", tools: [list_deployments, describe_deployment] }
+    - { q: "show the logs of a pod", tools: [get_logs] }
+    - { q: "is the cluster healthy", tools: [list_all_pods, list_nodes] }
 
 # The allowlist. Only these (verb, resource) pairs are permitted, all read-only.
 # Anything not listed here is rejected.

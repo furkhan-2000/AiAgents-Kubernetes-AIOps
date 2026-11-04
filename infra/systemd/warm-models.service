@@ -1,0 +1,20 @@
+# Warms the Ollama models after boot so the first real request is never slow/cold.
+# Install on the AI server (ai-dev):
+#   sudo cp infra/systemd/warm-models.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now warm-models.service
+# Adjust the model names if you change them in config.yaml / compose.
+[Unit]
+Description=Warm Ollama models after boot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# wait for the ollama container to be up, then load each model into RAM.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do docker exec ollama ollama ps >/dev/null 2>&1 && break; sleep 5; done'
+ExecStart=/bin/sh -c 'docker exec ollama ollama run qwen2.5:7b-instruct-q5_K_M "ok" || true'
+ExecStart=/bin/sh -c 'docker exec ollama ollama run nomic-embed-text "ok" || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

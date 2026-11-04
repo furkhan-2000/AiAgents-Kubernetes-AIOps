@@ -43,7 +43,9 @@ now — it never returns an old count.
 ## Honest limits
 - It improves **consistency + speed on repeat questions**, not raw intelligence. A
   7B stays a 7B.
-- Useless until it has history — seed it with a few good questions, let it grow.
+- It ships **pre-seeded**: on first start (empty DB) the agent loads the `rag.seed`
+  examples in `config.yaml`, so it helps from the very first question and keeps
+  learning from real successful investigations after that.
 - Costs ~0.3 GB RAM (embed model) + a tiny bit of latency per question.
 
 ## Setup
@@ -81,6 +83,13 @@ now — it never returns an old count.
 | `min_similarity` | ignore matches below this (0–1) | 0.75 |
 | `max_rows` | cap the memory size | 5000 |
 | `db_path` | the memory file (in a volume) | /app/memory/rag.db |
+| `seed` | list of `{q, tools}` examples loaded once into an empty DB | ~12 examples |
+
+**Pre-seeding:** when the store is empty at startup the agent stores each `seed`
+example (question → read-only tool names only) so RAG is useful from the first
+query. Seeding emits `rag.seeded` (with row count), or `rag.seed_error` on failure
+(fail-open — the agent still runs). Seed tools must be allowlisted; a test enforces
+this (`tests/test_memory.py::test_seed_tools_are_all_allowlisted`).
 
 ## Files
 - `app/memory.py` — the logic (recall/remember, allowlist-gated, fail-open).

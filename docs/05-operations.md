@@ -15,6 +15,17 @@ docker compose ps                            # confirm agent (healthy)
 docker exec ollama ollama run qwen2.5:7b-instruct-q5_K_M "Reply in English: ready"
 ```
 
+### Warm automatically on boot (optional)
+So the first question after a reboot isn't slow, install the oneshot unit at
+`infra/systemd/warm-models.service` (it runs the warm command for the chat and
+embed models once Docker is up):
+```bash
+sudo cp infra/systemd/warm-models.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable warm-models.service
+```
+Combined with `OLLAMA_KEEP_ALIVE=30m` (already set in compose), the model then
+stays resident between requests.
+
 ## Watch what it's doing (live)
 ```bash
 docker compose logs -f agent | grep -E "loop\.|investigate|denied"   # live events

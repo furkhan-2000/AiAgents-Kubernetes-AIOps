@@ -85,7 +85,7 @@ neighbour. That is what "low blast radius" means.
    |                                           |
    |   +-----------+        +--------------+   |
    |   |  agent    |  <-->  |   ollama     |   |   ollama has NO internet
-   |   | FastAPI   |        | qwen2.5:7b   |   |   (internal-only network)
+   |   | FastAPI   |        | qwen2.5 q5   |   |   (internal-only network)
    |   +-----+-----+        +--------------+   |
    +---------+--------------------------------+
              | TCP 6443 (kube API) - allowed from AI server only
@@ -146,7 +146,7 @@ auditable.
         |
         v
   [2] llm.py       send the question to Ollama. Get back strict JSON:
-        |          {"action":"list","resource":"pods","namespace":"kube-system"}
+        |          {"verb":"get","resource":"pods","namespace":"kube-system"}
         |          Bad/unparseable JSON -> treated as "not understood", stop.
         v
   [3] policy.py    THE GATE. Is this action on the read-only allowlist?
@@ -168,8 +168,9 @@ Key properties:
 - `executor.py` builds `["kubectl", "get", "pods", "-n", "kube-system"]` as an
   argument list. There is no shell, so there is no command injection.
 - Anything the policy does not explicitly allow is denied by default.
-- A rate limit (`10/minute` via slowapi) is a backstop; the real rate limiting
-  belongs at nginx in front of the agent.
+- A per-caller rate limit (slowapi) is a backstop; the real rate limiting belongs
+  at nginx in front of the agent. Limits differ per endpoint: `/query` 10/minute,
+  `/investigate` 6/minute (the loop is heavier).
 
 ---
 
@@ -217,8 +218,9 @@ walls. We keep both on purpose.
 
 The agent's cluster identity is granted only `get` / `list` / `watch`, and only on
 the resources it needs. It can **never** read secrets, **never** read configmaps,
-and **never** write anything. The allowlist and the RBAC role are kept in sync; if
-you add a resource to one, add it to the other.
+and **never** write anything. The RBAC role is a read-only **superset** of the
+allowlist (it may permit more resources than `/query` exposes, all still get/list/
+watch only); when you add a tool, confirm its resource is in the RBAC role.
 
 Verify the RBAC wall directly:
 
@@ -293,9 +295,13 @@ AiAgents-Kubernetes-AIOps/
       clusterrole.yaml       # ai-readonly: get/list/watch only, never secrets
       clusterrolebinding.yaml # binds the role to the cert User "ai-agent"
   infra/
-    nginx/
-      stream.d/
-        kube-api.conf        # L4 TCP passthrough config for the proxy VM
+    nginx/stream.d/kube-api.conf   # L4 TCP passthrough config for the proxy VM
+    monitoring/                    # Prometheus+Loki+Grafana compose + OTel config
+    systemd/warm-models.service    # warm Ollama models on boot
+  tests/                           # full pytest suite (incl. test_security_invariants.py)
+  docs/                            # 00-START-HERE .. 10-rag (step-by-step guides)
+  config.yaml                      # ollama/model, allowlist, tools, investigation, rag
+  CLAUDE.md  ARCHITECTURE.md  CHANGELOG.md
 ```
 
 ---
@@ -404,7 +410,7 @@ What the compose file enforces:
   bastion).
 - kubeconfig mounted read-only at `/app/kubeconfig`.
 - `AGENT_TOKEN` is required; compose refuses to start without it.
-- ollama pinned by digest, model `qwen2.5:7b-instruct`, on an internal network with
+- ollama pinned by digest, model `qwen2.5:7b-instruct-q5_K_M`, on an internal network with
   no internet.
 - both containers: non-root, read-only rootfs, caps dropped, no-new-privileges,
   pids/memory/cpu limits.

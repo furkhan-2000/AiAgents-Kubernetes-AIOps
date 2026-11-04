@@ -133,6 +133,16 @@ def test_loop_uses_memory_recall_and_remember(cfg):
     assert spy.remembered and "list_all_pods" in spy.remembered[1]
 
 
+def test_seed_tools_are_all_allowlisted(cfg):
+    """Every pre-seed example must reference only read-only allowlisted tools."""
+    allowed = set(cfg["investigation"]["tools"])
+    seed = cfg.get("rag", {}).get("seed", [])
+    assert seed, "expected a non-empty rag.seed"
+    for item in seed:
+        for t in item["tools"]:
+            assert t in allowed, f"seed tool {t} not in allowlist"
+
+
 def test_cosine_basic():
     assert cosine([1, 0], [1, 0]) == pytest.approx(1.0)
     assert cosine([1, 0], [0, 1]) == pytest.approx(0.0)

@@ -2,6 +2,18 @@
 
 What changed, newest first. Dates are when the work landed.
 
+## 2026-11-04 — Docs accuracy pass + RAG pre-seed + boot warm-up
+- RAG now **pre-seeds** from `config.yaml rag.seed` on first start (empty DB) so it
+  helps from the first question; emits `rag.seeded` / `rag.seed_error` (fail-open).
+  Config: added `seed` key (docs 03 + 10). Test: `test_seed_tools_are_all_allowlisted`.
+- Added `infra/systemd/warm-models.service` (oneshot, warms chat + embed models on
+  boot); documented in `docs/05-operations.md`.
+- Docs-accuracy sweep (agent-audited): fixed README `/query` JSON example (`verb`/
+  `get`, not `action`/`list`), per-endpoint rate limits (10 vs 6/min), repo layout
+  (added tests/ docs/ infra/monitoring infra/systemd), allowlist↔RBAC wording (RBAC
+  is a read-only superset), model name precision (`qwen2.5:7b-instruct-q5_K_M`),
+  compose Q4→Q5 comment, and `app/main.py` route docstring.
+
 ## 2026-11-03 — RAG memory (optional, off by default)
 - Added RAG memory: remembers which read-only tools answered similar past questions
   and suggests them, to make the weak CPU model more consistent.

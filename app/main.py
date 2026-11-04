@@ -1,4 +1,4 @@
-"""FastAPI app. One endpoint: POST /query. Runs the pipeline:
+"""FastAPI app. Routes: /healthz, POST /query, POST /investigate. Pipeline:
 auth -> llm (Ollama) -> policy (allowlist) -> executor (kubectl) -> audit."""
 
 import os
@@ -75,6 +75,16 @@ def _build_memory():
             min_similarity=float(_rag_cfg.get("min_similarity", 0.75)),
             max_rows=int(_rag_cfg.get("max_rows", 5000)),
         )
+        # Pre-seed once when the store is empty, so RAG helps from the first query.
+        try:
+            if store.count() == 0:
+                for item in (_rag_cfg.get("seed") or []):
+                    q, tools = item.get("q"), item.get("tools")
+                    if q and tools:
+                        rag.remember(q, tools)
+                audit("rag.seeded", rows=store.count())
+        except Exception as exc:
+            audit("rag.seed_error", error=str(exc))
         audit("rag.enabled", db=_rag_cfg.get("db_path", "/app/memory/rag.db"))
         return rag
     except Exception as exc:

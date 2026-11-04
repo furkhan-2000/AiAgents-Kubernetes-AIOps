@@ -187,6 +187,10 @@ class InvestigateLoop:
                 question, "\n\n".join(history_parts), timeout=synth_timeout)
         except LLMError as exc:
             audit("loop.synth_error", caller=caller, error=str(exc))
+            # The tools ran successfully, so the tool-path is still worth remembering
+            # even though the prose summary failed (slow CPU model).
+            if self._memory is not None and used_tools:
+                self._memory.remember(question, used_tools)
             return InvestigateResponse(
                 allowed=True,
                 answer="I gathered data but could not summarise it. The raw findings are "

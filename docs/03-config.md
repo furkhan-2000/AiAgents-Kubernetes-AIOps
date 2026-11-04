@@ -52,6 +52,7 @@ a value, then redeploy: `docker compose up -d --build`.
 | `min_similarity` | ignore matches below this (0–1) | 0.75 |
 | `max_rows` | cap the memory size | 5000 |
 | `db_path` | the memory file (in a volume) | /app/memory/rag.db |
+| `seed` | `{q, tools}` examples pre-loaded once into an empty DB (tools must be allowlisted) | ~12 examples |
 
 Full guide: [10-rag.md](10-rag.md).
 
