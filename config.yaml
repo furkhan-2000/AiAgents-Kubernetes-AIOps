@@ -51,7 +51,7 @@ investigation:
 # questions and suggests them, to make the weak model more consistent. Stores tool
 # NAMES only (never data). Fail-open: any error = runs as if RAG is off.
 rag:
-  enabled: false             # turn on after pulling the embed model (see docs)
+  enabled: enabled            # turn on after pulling the embed model (see docs)
   embed_model: "nomic-embed-text"
   embed_dim: 768             # MUST match the embed model's output width
   embed_timeout_seconds: 20  # bounded so a slow embed can't stall /investigate
