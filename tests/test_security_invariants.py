@@ -50,6 +50,22 @@ def test_every_tool_builds_read_only_verb():
         assert not (FORBIDDEN_VERBS & set(argv)), f"tool {name} argv has a write token: {argv}"
 
 
+# ---- No-namespace LIST/GET tools sweep ALL namespaces, never silently 'default' --
+
+def test_list_tools_sweep_all_namespaces_when_none_given():
+    # These answer cluster-wide questions; with no namespace they must search every
+    # namespace, not default (which produced wrong default-only answers).
+    for name in ("list_pods", "get_events", "top_pods", "list_deployments",
+                 "list_services", "get_endpoints", "get_ingresses", "get_pvcs"):
+        argv = tools.build_argv(ToolCall(tool=name), "default")
+        assert "--all-namespaces" in argv, f"{name} did not sweep all namespaces: {argv}"
+        assert "default" not in argv, f"{name} silently fell back to default: {argv}"
+        assert argv[0] in READ_ONLY_VERBS
+    # A named namespace still scopes to exactly that namespace.
+    argv = tools.build_argv(ToolCall(tool="list_pods", namespace="prd"), "default")
+    assert argv[argv.index("-n") + 1] == "prd" and "--all-namespaces" not in argv
+
+
 # ---- WALL 2: the executor hard-refuses every mutating verb --------------------
 
 def test_executor_refuses_all_forbidden_verbs():

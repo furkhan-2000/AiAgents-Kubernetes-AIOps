@@ -41,8 +41,16 @@ def test_list_all_pods_is_all_namespaces():
     assert argv == ["get", "pods", "--all-namespaces", "-o", "wide"]
 
 
-def test_default_namespace_used_when_missing():
+def test_list_tool_sweeps_all_namespaces_when_missing():
+    # No namespace on a LIST tool -> search every namespace (not silently 'default',
+    # which gave wrong default-only answers for cluster-wide questions).
     argv = tools.build_argv(ToolCall(tool="list_pods"), "mydefault")
+    assert "--all-namespaces" in argv and "mydefault" not in argv
+
+
+def test_named_tool_uses_default_namespace_when_missing():
+    # A tool that targets a specific object still needs a namespace; use the default.
+    argv = tools.build_argv(ToolCall(tool="describe_pod", name="p"), "mydefault")
     assert "mydefault" in argv
 
 
