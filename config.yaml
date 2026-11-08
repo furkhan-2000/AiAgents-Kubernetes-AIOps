@@ -21,7 +21,9 @@ brain:
 
 investigation:
   max_steps: 3               # hard cap on tool calls (CPU: fewer = smaller synth prompt = fewer timeouts)
-  max_output_bytes: 1500     # per-tool output truncation (smaller prompt = faster CPU prefill + synth)
+  max_output_bytes: 3000     # per-tool output cap. Do NOT lower below one full table: -o wide
+                             # across namespaces is ~1.6KB for ~15 pods; too small truncates the
+                             # LAST rows (prd sorts last) so the model "can't find" prd pods.
   loop_timeout_seconds: 600  # wall-clock budget for the whole loop (CPU 7B is slow)
   max_concurrent: 1          # ONE investigation at a time: 2x 7B on a CPU box saturates Ollama (seen: "Connection refused")
   synth_reserve_seconds: 240 # reserve more for the final summary call so broad questions still summarise on CPU
