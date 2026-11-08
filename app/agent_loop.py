@@ -146,10 +146,13 @@ class InvestigateLoop:
 
             # kubectl is quick; cap it at 30s but never above the remaining step budget.
             raw = self._executor.run_readonly(argv_tail, timeout=min(30, self._step_timeout(start)))
-            output = self._truncate(_redact(raw))
+            redacted = _redact(raw)
             # Ground the model with an EXACT count computed in code (it cannot count
-            # rows reliably). Prepended so the answer cites real numbers.
-            fact = table_facts(output)
+            # rows reliably). Count the FULL table BEFORE truncation so the count stays
+            # authoritative even when a large table is trimmed for the prompt; then
+            # truncate only the displayed body.
+            fact = table_facts(redacted)
+            output = self._truncate(redacted)
             if fact:
                 output = f"[EXACT COUNT (computed, authoritative): {fact}]\n{output}"
             audit("loop.tool", caller=caller, tool=call.tool, args=args)
@@ -187,16 +190,33 @@ class InvestigateLoop:
                 question, "\n\n".join(history_parts), timeout=synth_timeout)
         except LLMError as exc:
             audit("loop.synth_error", caller=caller, error=str(exc))
-            # The tools ran successfully, so the tool-path is still worth remembering
-            # even though the prose summary failed (slow CPU model).
-            if self._memory is not None and used_tools:
-                self._memory.remember(question, used_tools)
-            return InvestigateResponse(
-                allowed=True,
-                answer="I gathered data but could not summarise it. The raw findings are "
-                       "in the steps below.",
-                steps=steps,
-            )
+            # Robust retry: the first synth often times out only because the prompt was
+            # large. Retry ONCE with a hard-trimmed history (last 2 observations, each
+            # capped) so a broad question still gets a short summary on a slow CPU.
+            answer = None
+            if self._remaining(start) > 20:
+                trimmed = [p[:700] for p in history_parts[-2:]]
+                try:
+                    retry_timeout = min(self._call_cap, max(30, self._remaining(start)))
+                    answer = self._llm.synthesize(
+                        question, "\n\n".join(trimmed), timeout=retry_timeout)
+                    audit("loop.synth_retry_ok", caller=caller)
+                except LLMError:
+                    audit("loop.synth_retry_failed", caller=caller)
+                    answer = None
+            if not answer or not answer.strip():
+                # Both tries failed. The tools still ran, so remember the tool-path
+                # (stores names only, fail-open) even though the prose summary failed.
+                if self._memory is not None and used_tools:
+                    self._memory.remember(question, used_tools)
+                return InvestigateResponse(
+                    allowed=True,
+                    answer="I gathered the data but the summary step timed out (the local "
+                           "model is slow on CPU for broad questions). The raw findings are "
+                           "in the steps below — or ask about one pod/namespace at a time.",
+                    steps=steps,
+                )
+            answer = _redact(answer)
 
         # A small model sometimes emits a tool-call JSON instead of prose. Detect
         # that and fall back to a plain summary of what was observed, rather than

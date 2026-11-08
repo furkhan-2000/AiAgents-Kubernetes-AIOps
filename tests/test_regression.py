@@ -263,7 +263,56 @@ def test_loop_synth_failure_recovers(cfg):
     ex = _Exec()
     loop = _loop(cfg, _LLM([ToolCall(tool="list_all_pods")], answer=LLMError("x")), ex)
     res = loop.run("q", "bastion")
-    assert res.allowed and "could not summarise" in res.answer and len(res.steps) == 1
+    # Synth fails on both the first try AND the trimmed retry -> graceful degrade:
+    # allowed, tools still ran (1 step), and the answer points to the raw findings.
+    assert res.allowed and "timed out" in res.answer and len(res.steps) == 1
+
+
+class _LLMRetry:
+    """synthesize raises once, then succeeds — exercises the loop.synth_retry_ok path
+    (first synth times out on a slow CPU; the trimmed retry returns prose)."""
+    def __init__(self, steps, retry_answer="recovered summary"):
+        self._steps = list(steps)
+        self._retry_answer = retry_answer
+        self._synth_calls = 0
+    def next_step(self, q, c, h, timeout=None):
+        if not self._steps:
+            return ToolCall(tool="final")
+        n = self._steps.pop(0)
+        if isinstance(n, Exception):
+            raise n
+        return n
+    def synthesize(self, q, h, timeout=None):
+        self._synth_calls += 1
+        if self._synth_calls == 1:
+            raise LLMError("first synth timed out")
+        return self._retry_answer
+
+
+def test_loop_synth_retry_succeeds(cfg):
+    ex = _Exec()
+    llm = _LLMRetry([ToolCall(tool="list_all_pods")])
+    res = _loop(cfg, llm, ex).run("q", "bastion")
+    assert res.allowed
+    assert "recovered summary" in res.answer   # the trimmed retry's prose is returned
+    assert "timed out" not in res.answer        # did NOT fall through to the degrade branch
+    assert llm._synth_calls == 2                 # proves the retry actually fired
+    assert len(res.steps) == 1
+
+
+def test_exact_count_is_from_full_table_not_truncated(cfg):
+    """The authoritative EXACT COUNT must reflect the FULL table even when the body
+    is truncated for the prompt (counting must happen before truncation)."""
+    header = "NAME READY STATUS RESTARTS AGE"
+    rows = [f"pod-{n} 1/1 Running 0 1d" for n in range(50)]
+    big = "\n".join([header] + rows)
+    inv = dict(cfg["investigation"]); inv["max_output_bytes"] = 150   # forces truncation
+    ex = _Exec(); ex.out = big
+    loop = InvestigateLoop(_LLM([ToolCall(tool="list_all_pods")], answer="ok"),
+                           Policy(cfg["allowlist"], cfg["investigation"]["tools"]), ex, "default", inv)
+    res = loop.run("how many pods are running", "bastion")
+    obs = res.steps[0].observation
+    assert "50 rows" in obs and "Running=50" in obs   # full count, not the ~3 truncated rows
 
 
 def test_loop_empty_answer_falls_back(cfg):
