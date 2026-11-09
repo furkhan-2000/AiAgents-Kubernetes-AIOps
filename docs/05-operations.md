@@ -2,6 +2,16 @@
 
 Day-to-day tasks. Run on the AI server unless noted.
 
+## Deploy flow at a glance
+
+```mermaid
+flowchart LR
+    G[git pull] --> E[load .env<br/>AGENT_TOKEN] --> U[docker compose<br/>up -d --build] --> P[compose ps<br/>agent healthy?] --> W[warm model<br/>ollama run ...ready]
+```
+
+`--build` rebuilds the **agent** image (Ollama is untouched). Warming after avoids a
+slow first answer; the boot service below does it automatically.
+
 ## Deploy an update
 ```bash
 cd ~/AiAgents-Kubernetes-AIOps && git pull   # get the latest code
@@ -21,7 +31,7 @@ So the first question after a reboot isn't slow, install the oneshot unit at
 embed models once Docker is up):
 ```bash
 sudo cp infra/systemd/warm-models.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable warm-models.service
+sudo systemctl daemon-reload && sudo systemctl enable --now warm-models.service
 ```
 Combined with `OLLAMA_KEEP_ALIVE=30m` (already set in compose), the model then
 stays resident between requests.

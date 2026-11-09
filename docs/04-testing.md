@@ -1,6 +1,21 @@
 # 4. Testing
 
-Two kinds: automated (code) and manual (live). Do both.
+Two kinds: automated (code) and manual (live). Do both. The suite is **206 tests**
+(should be all green).
+
+## What the tests cover (bottom = foundation, top = the security gate)
+
+```mermaid
+flowchart TD
+    S["🔒 security-invariant + attack-case tests<br/>(the executable wall-check — if these fail, a wall weakened)"]
+    I["integration: API, investigate loop, cache, routing, RAG"]
+    U["unit: policy, tools, executor, counts, redact"]
+    U --> I --> S
+```
+
+`tests/test_security_invariants.py` is the top gate: it proves the 3 walls hold
+(no write verb, no secrets, no shell, injection rejected). Fix the **code**, never
+the test.
 
 ## Automated tests (on your dev machine or AI server)
 ```bash

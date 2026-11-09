@@ -64,7 +64,7 @@ else → `/query`. The user just types a question.
   then: model writes the final plain-English answer (grounded only in what it saw)
 ```
 Guards that keep the weak model sane: **de-duplicate** repeated calls, **skip
-redundant** re-listing after `list_all_pods`, **reserve time** for the final
+redundant** re-listing after `list_all_pods`, **retry the final summary once** (hard-trimmed) if it times out, **reserve time** for the final
 answer, **cap** output size and total time, and fall back to an honest message if
 it gathers nothing.
 
@@ -112,7 +112,7 @@ it improves consistency without ever going stale or escalating privilege. See
 
 ### `tests/` — the safety net
 Full unit + integration + security tests (policy, tools, executor, counts, redact,
-auth, loop, cache, routing, end-to-end API, attack cases). All green.
+auth, loop, cache, routing, end-to-end API, attack cases). All green (206 tests).
 
 ---
 

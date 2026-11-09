@@ -11,6 +11,7 @@
 | Bastion can't reach agent | bound to localhost | publish on the host IP `192.168.255.30:443` |
 | `/investigate` "took too long" | CPU model is slow / cold | warm the model; raise `AGENT_CLIENT_TIMEOUT` |
 | `loop.plan_error: timed out` | one model call too slow on CPU | warm model; it still answers |
+| `429` / "assistant is busy" on `/investigate` | another investigation already running (`max_concurrent: 1` — one at a time on CPU) | wait a moment and retry; ask one question at a time |
 | Answer in another language | model drift | brain prompt forces English; redeploy latest |
 | kubeconfig "permission denied" | wrong owner | `chown 1000:1000` the kubeconfig, mode 600 |
 | "not a question about the cluster" | correct refusal (off-topic) | not a bug — ask a cluster question |

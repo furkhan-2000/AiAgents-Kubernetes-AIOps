@@ -2,6 +2,25 @@
 
 What you need before setup. Read, then go to [02-setup.md](02-setup.md).
 
+## How the machines connect (one allowed path per hop)
+
+```mermaid
+flowchart LR
+    U[User laptop<br/>on VPN] --> P[proton<br/>VPN .56]
+    P --> B[bastion .132<br/>the only door]
+    B -->|443| A[ai-dev .30<br/>agent + ollama]
+    A -->|6443| X[proxy .135<br/>L4 passthrough]
+    X -->|6443| C[cluster .134<br/>read-only RBAC]
+    B -.19090/13100.-> M[monitoring .79<br/>Prom+Loki+Grafana]
+    A -.-> M
+    X -.-> M
+    C -.-> M
+```
+
+Each box trusts only the hop before it; one port open per hop (solid = request path,
+dotted = every VM ships metrics/logs to monitoring). If one box is breached it cannot
+reach past its single neighbour — that's "low blast radius".
+
 ## The machines (VMs, subnet 192.168.255.0/24)
 
 | Role | Host | IP | What runs on it |

@@ -156,7 +156,12 @@ auditable.
   [4] executor.py  run the real kubectl as an argv array (NO shell, no string
         |          concatenation, so nothing can be injected). Read-only only.
         v
-  [5] audit.py     write a JSON line (who, question, action, allowed, result)
+  [5] counts.py    compute EXACT row counts in code (the LLM must not count),
+        |          on the FULL table before any truncation.
+        v
+  [6] redact.py    mask any secret-looking strings in the output (ReDoS-safe).
+        v
+  [7] audit.py     write a JSON line (who, question, action, allowed, result)
         |          to stdout, picked up by the host log pipeline / SIEM.
         v
   answer back to the caller
@@ -181,7 +186,7 @@ A request has to clear all of these, in order. Any one of them can stop it.
 | #  | Gate                         | Where            | What it blocks |
 |----|------------------------------|------------------|----------------|
 | 1  | VPN / ZTNA                   | VPN server       | Anyone not on the tunnel. No tunnel, no route in. |
-| 2  | WireGuard PresharedKey       | VPN server       | Adds a second, quantum-resilient key layer on top of the tunnel. |
+| 2  | WireGuard PresharedKey       | VPN server       | A second shared-secret key layered on top of the tunnel (defence in depth). |
 | 3  | Bastion (single door)        | bastion          | Direct access to the AI server. Everything goes through one audited host. |
 | 4  | firewalld drop zone          | every VM         | All inbound by default. Only named rich-rules per hop are allowed. |
 | 5  | fail2ban (sshd + recidive)   | every VM         | Brute-force and repeat offenders. Admin subnet is in ignoreip. |
@@ -268,7 +273,6 @@ AiAgents-Kubernetes-AIOps/
   Dockerfile                 # multi-stage, non-root, kubectl pinned to v1.34.12
   docker-compose.yml         # agent + ollama, hardened, external nets/volume
   requirements.txt
-  config.yaml                # ollama url, cluster name, the read-only allowlist
   .gitignore                 # keeps kubeconfig / certs / tokens out of git
   app/
     main.py                  # FastAPI /query + /investigate endpoints

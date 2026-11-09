@@ -44,7 +44,7 @@ main (wiring, limiter, concurrency cap, cache, 422, RAG build) · auth (bearer, 
 · schemas · llm (interpret/next_step/synthesize/embed) · policy (WALL1 allowlist + `_is_safe`)
 · tools (read-only catalog) · executor (WALL2 argv, read-only verbs, caps) · counts (exact
 numbers) · redact (mask secrets, ReDoS-safe) · agent_loop (the loop + guards + RAG) ·
-memory/memory_store (RAG, off by default) · audit (JSON stdout). config.yaml at repo root.
+memory/memory_store (RAG, ON by default, pre-seeded, persistent volume) · audit (JSON stdout). config.yaml at repo root.
 
 ## Deploy (ai-dev 192.168.255.30)
 `git pull && export AGENT_TOKEN=... && docker compose up -d --build`  (--build or code won't update).

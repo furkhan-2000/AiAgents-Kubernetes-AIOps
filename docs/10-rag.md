@@ -58,9 +58,9 @@ run*, and the real answer still comes from running that tool live:
 User:   Why is my application crashing?
 RAG:    find relevant available TOOL NAMES (not documents)
 Retrieved:
-          get_pod_status
-          get_pod_logs
-          get_pod_events
+          list_all_pods
+          describe_pod
+          get_logs
 LLM:    selects an appropriate read-only investigation step
 Agent:  validates the selection (3 walls) and executes it LIVE
 ```
@@ -115,7 +115,7 @@ tool names, and the answer is always computed fresh from the cluster.
 ## Config (`config.yaml` → `rag:`)
 | Key | Meaning | Default |
 |-----|---------|---------|
-| `enabled` | turn RAG on/off | false |
+| `enabled` | turn RAG on/off | true |
 | `embed_model` | local embedding model | nomic-embed-text |
 | `embed_dim` | vector width — **must match the embed model** | 768 |
 | `embed_timeout_seconds` | max time for one embed call (keeps the loop bounded) | 20 |
