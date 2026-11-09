@@ -2,6 +2,20 @@
 
 What changed, newest first. Dates are when the work landed.
 
+## 2026-11-09 — Investigate-loop robustness + CPU-safe tuning
+- **All-namespace sweep:** investigate LIST/GET tools now search every namespace when
+  the model names none (was silently defaulting to `default`, giving wrong
+  default-only answers). `app/tools.py` `_ns_scope()`; +security-invariant test.
+- **Synthesis retry:** on a synth timeout the loop retries once with a hard-trimmed
+  history before degrading, so broad questions still summarise on a slow CPU; honest
+  fallback otherwise (never a fabricated answer). Audit: `loop.synth_retry_ok/failed`.
+- **Count accuracy:** exact `[EXACT COUNT]` is now computed on the FULL table before
+  truncation (a lowered `max_output_bytes` was undercounting large tables).
+- **CPU-safe config:** `max_concurrent: 2→1` (two 7B calls on CPU saturated Ollama →
+  "Connection refused"), `max_steps: 4→3`, `synth_reserve_seconds: 200→240`,
+  `max_output_bytes` kept at 3000 (lower truncated prd pods off the list).
+- Tests: 206 green (added retry-success + count-under-truncation regressions).
+
 ## 2026-11-04 — Docs accuracy pass + RAG pre-seed + boot warm-up
 - RAG now **pre-seeds** from `config.yaml rag.seed` on first start (empty DB) so it
   helps from the first question; emits `rag.seeded` / `rag.seed_error` (fail-open).
