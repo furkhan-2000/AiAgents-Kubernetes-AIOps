@@ -28,19 +28,19 @@ def _run_ask(monkeypatch, capsys, urlopen):
 
 
 def test_unreadable_response_is_handled(monkeypatch, capsys):
-    out = _run_ask(monkeypatch, capsys, lambda req, timeout=None: _Resp(b"not json at all"))
+    out = _run_ask(monkeypatch, capsys, lambda req, timeout=None, context=None: _Resp(b"not json at all"))
     assert "unreadable" in out.lower()
 
 
 def test_http_403_is_friendly(monkeypatch, capsys):
-    def urlopen(req, timeout=None):
+    def urlopen(req, timeout=None, context=None):
         raise urllib.error.HTTPError("u", 403, "forbidden", {}, None)
     out = _run_ask(monkeypatch, capsys, urlopen)
     assert "access denied" in out.lower()
 
 
 def test_ctrl_c_during_request_is_clean(monkeypatch, capsys):
-    def urlopen(req, timeout=None):
+    def urlopen(req, timeout=None, context=None):
         raise KeyboardInterrupt()
     out = _run_ask(monkeypatch, capsys, urlopen)
     assert "cancelled" in out.lower()
@@ -48,5 +48,5 @@ def test_ctrl_c_during_request_is_clean(monkeypatch, capsys):
 
 def test_valid_answer_printed(monkeypatch, capsys):
     out = _run_ask(monkeypatch, capsys,
-                   lambda req, timeout=None: _Resp(json.dumps({"answer": "All good."}).encode()))
+                   lambda req, timeout=None, context=None: _Resp(json.dumps({"answer": "All good."}).encode()))
     assert "All good." in out

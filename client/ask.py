@@ -14,11 +14,19 @@ Setup (see client/README.md):
 Config via environment (sensible defaults):
   AGENT_URL        default http://192.168.255.30:443
   AGENT_TOKEN_FILE default ~/.config/ai-agent/token
+
+mTLS (optional, recommended): when the agent is fronted by the nginx TLS proxy,
+set AGENT_URL to https://... and point these at the bastion's client cert so the
+proxy accepts the connection. If unset, the client stays plain HTTP (unchanged).
+  AGENT_CLIENT_CERT  bastion client certificate (e.g. ~/certs/client.crt)
+  AGENT_CLIENT_KEY   bastion client private key  (e.g. ~/certs/client.key)
+  AGENT_CA_CERT      CA cert that signed the proxy (e.g. ~/certs/ca.crt)
 """
 
 import json
 import os
 import socket
+import ssl
 import sys
 import urllib.request
 import urllib.error
@@ -27,6 +35,32 @@ AGENT_URL = os.environ.get("AGENT_URL", "http://192.168.255.30:443").rstrip("/")
 TOKEN_FILE = os.path.expanduser(
     os.environ.get("AGENT_TOKEN_FILE", "~/.config/ai-agent/token")
 )
+
+
+def _build_ssl_context():
+    """Return an SSLContext for mTLS when the client cert env vars are set and the
+    URL is https; otherwise None (plain HTTP, unchanged behaviour). Fail-closed: if
+    https is requested but the cert files are missing/unreadable, exit with a clear
+    message rather than silently connecting without a certificate."""
+    if not AGENT_URL.startswith("https://"):
+        return None
+    cert = os.path.expanduser(os.environ.get("AGENT_CLIENT_CERT", "~/certs/client.crt"))
+    key = os.path.expanduser(os.environ.get("AGENT_CLIENT_KEY", "~/certs/client.key"))
+    ca = os.path.expanduser(os.environ.get("AGENT_CA_CERT", "~/certs/ca.crt"))
+    missing = [p for p in (cert, key, ca) if not os.path.exists(p)]
+    if missing:
+        sys.exit("mTLS is required (https URL) but these cert files are missing: "
+                 + ", ".join(missing) + ". Ask an admin to provision the bastion "
+                 "client cert (chmod 600 on the key).")
+    try:
+        ctx = ssl.create_default_context(cafile=ca)   # verify the proxy's server cert
+        ctx.load_cert_chain(certfile=cert, keyfile=key)  # present our client cert
+    except (ssl.SSLError, OSError) as exc:
+        sys.exit(f"Could not load the client certificate for mTLS: {exc}")
+    return ctx
+
+
+_SSL_CONTEXT = _build_ssl_context()
 # Investigations run several LLM calls on a CPU model, so wait longer than the
 # server's own loop budget (loop_timeout_seconds + synth_reserve ~= 600s) so the
 # client never gives up before the server finishes.
@@ -80,7 +114,7 @@ def _ask(question: str, token: str) -> None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=_SSL_CONTEXT) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         data = json.loads(body)
     except urllib.error.HTTPError as exc:

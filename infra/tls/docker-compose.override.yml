@@ -1,0 +1,48 @@
+# mTLS front-door overlay. COPY this to the repo root on ai-dev as
+# `docker-compose.override.yml` (compose auto-merges it with docker-compose.yml):
+#
+#   cp infra/tls/docker-compose.override.yml ./docker-compose.override.yml
+#   docker compose up -d
+#
+# Prereqs (generated once on ai-dev, see infra/tls/README.md):
+#   ~/certs/{ca.crt,server.crt,server.key}  owned by you, keys chmod 600
+# Adjust CERT_DIR if your certs live elsewhere.
+#
+# Effect: the agent stops publishing :443 directly; the nginx tls-proxy takes over
+# :443 and only forwards connections that present a CA-signed client certificate.
+
+services:
+  # Remove the agent's direct host exposure — it is now reachable ONLY via the proxy
+  # (both are on the AI-Agent network, so the proxy reaches it by service name).
+  agent:
+    ports: []
+
+  tls-proxy:
+    image: nginx:1.27-alpine
+    container_name: tls-proxy
+    restart: unless-stopped
+    depends_on: [agent]
+    networks: [AI-Agent]
+    ports:
+      # Published on the AI server's LAN IP so the bastion can reach it; the host
+      # firewall still allows 443 from the bastion only.
+      - "${AGENT_BIND_IP:-192.168.255.30}:443:443"
+    volumes:
+      - "./infra/tls/nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "${CERT_DIR:-/home/dev/certs}/server.crt:/certs/server.crt:ro"
+      - "${CERT_DIR:-/home/dev/certs}/server.key:/certs/server.key:ro"
+      - "${CERT_DIR:-/home/dev/certs}/ca.crt:/certs/ca.crt:ro"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m
+      - /var/run:rw,noexec,nosuid,size=4m
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETUID, SETGID]   # nginx needs these to bind 443 + drop to worker user
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
