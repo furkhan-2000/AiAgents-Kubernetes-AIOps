@@ -41,7 +41,7 @@ fails, a wall was weakened; fix the code, never the test. Behaviour change = add
 
 ## File map (app/) — jump straight here
 main (wiring, limiter, concurrency cap, cache, 422, RAG build) · auth (bearer, fail-closed)
-· schemas · llm (interpret/next_step/synthesize/embed) · policy (WALL1 allowlist + `_is_safe`)
+· schemas · llm (route/interpret/next_step/synthesize/embed) · policy (WALL1 allowlist + `_is_safe`)
 · tools (read-only catalog) · executor (WALL2 argv, read-only verbs, caps) · counts (exact
 numbers) · redact (mask secrets, ReDoS-safe) · agent_loop (the loop + guards + RAG) ·
 memory/memory_store (RAG, ON by default, pre-seeded, persistent volume) · audit (JSON stdout). config.yaml at repo root.

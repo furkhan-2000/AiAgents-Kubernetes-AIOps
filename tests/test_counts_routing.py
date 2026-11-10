@@ -1,5 +1,10 @@
-"""Deterministic counting + client routing."""
+"""Deterministic counting + client posts to the agent's unified /ask endpoint.
 
+Routing (query vs investigate) now happens in the AGENT via an LLM call, not in the
+client by keywords, so the client just posts every question to /ask (see app/llm.py
+route() and app/main.py /ask)."""
+
+import json
 import pytest
 from app.counts import table_facts
 import client.ask as ask
@@ -35,17 +40,24 @@ def test_counts_error_output():
     assert table_facts("error: forbidden") == "0 rows"
 
 
-@pytest.mark.parametrize("q", [
-    "why is the web pod crashing", "what went wrong in the logs",
-    "debug the api service", "investigate the failed deployment", "pod keeps restarting",
-])
-def test_route_investigate(q):
-    assert ask._route(q) == "/investigate"
+def test_client_posts_every_question_to_ask(monkeypatch):
+    """The thin client no longer routes by keywords — it always posts to /ask and the
+    agent decides. Verify the endpoint is /ask and the body carries the question."""
+    import urllib.request
 
+    seen = {}
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return json.dumps({"output": "ok"}).encode()
+    def fake_urlopen(req, timeout=None, context=None):
+        seen["url"] = req.full_url
+        seen["body"] = json.loads(req.data.decode())
+        return _Resp()
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-@pytest.mark.parametrize("q", [
-    "how many pods are running", "list all services", "show me the nodes",
-    "what namespaces exist",
-])
-def test_route_query(q):
-    assert ask._route(q) == "/query"
+    for q in ["how many pods are running", "why is the web pod crashing",
+              "what kubernetes version", "which CNI plugin is used"]:
+        ask._ask(q, "tok")
+        assert seen["url"].endswith("/ask")       # always the unified endpoint
+        assert seen["body"]["q"] == q             # question forwarded verbatim

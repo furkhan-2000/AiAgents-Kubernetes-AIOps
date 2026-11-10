@@ -50,6 +50,13 @@ def test_every_tool_builds_read_only_verb():
         assert not (FORBIDDEN_VERBS & set(argv)), f"tool {name} argv has a write token: {argv}"
 
 
+def test_config_investigation_tools_all_have_builders():
+    # A tool name in config with no builder passes every other test but raises
+    # ValueError("unknown tool") at runtime when the brain calls it. Guard that.
+    for name in _cfg()["investigation"]["tools"]:
+        assert name in tools.CATALOG, f"config investigation tool has no builder: {name}"
+
+
 # ---- No-namespace LIST/GET tools sweep ALL namespaces, never silently 'default' --
 
 def test_list_tools_sweep_all_namespaces_when_none_given():

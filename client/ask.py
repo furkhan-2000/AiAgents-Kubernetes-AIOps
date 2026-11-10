@@ -52,23 +52,12 @@ def _load_token() -> str:
     return token
 
 
-# Questions that need multi-step reasoning (logs/events/why) go to /investigate;
-# simple factual lookups go to /query (faster, exact).
-_INVESTIGATE_HINTS = (
-    "why", "what went wrong", "went wrong", "fail", "failed", "crash", "crashing",
-    "broken", "error", "debug", "investigate", "diagnose", "root cause", "logs",
-    "restart", "not working", "issue", "problem", "event", "events", "healthy",
-    "health", "wrong",
-)
-
-
-def _route(question: str) -> str:
-    q = question.lower()
-    return "/investigate" if any(h in q for h in _INVESTIGATE_HINTS) else "/query"
-
-
 def _ask(question: str, token: str) -> None:
-    endpoint = _route(question)
+    # The AGENT decides the route (query vs investigate) with a small LLM call; the
+    # client stays dumb and just posts every question to /ask. This fixes the old
+    # keyword routing that wrongly refused questions with no trigger word (e.g.
+    # "what kubernetes version").
+    endpoint = "/ask"
     body = json.dumps({"q": question}).encode("utf-8")
     req = urllib.request.Request(
         f"{AGENT_URL}{endpoint}",

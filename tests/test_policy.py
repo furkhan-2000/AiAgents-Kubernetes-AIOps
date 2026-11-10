@@ -86,3 +86,17 @@ def test_empty_allowlist_denies_everything():
     p = Policy([], [])
     assert not p.check(Action(verb="get", resource="pods"))[0]
     assert not p.check_tool(ToolCall(tool="list_pods"))[0]
+
+
+def test_cluster_scoped_tools_pass_with_namespace_allowlist():
+    """Cluster-scoped metadata tools take NO namespace; a configured namespace
+    allowlist must NOT deny them (regression: the new get_version/cluster_info/...
+    tools were initially missing from _CLUSTER_SCOPED_TOOLS)."""
+    tool_names = ["get_version", "cluster_info", "get_api_resources", "get_crds",
+                  "get_component_statuses", "list_storageclasses", "list_nodes"]
+    p = Policy([], tool_names, allowed_namespaces=["prd"])   # a restrictive ns allowlist
+    for name in tool_names:
+        ok, reason = p.check_tool(ToolCall(tool=name))       # no namespace supplied
+        assert ok, f"{name} wrongly denied under a namespace allowlist: {reason}"
+    # a NAMESPACED tool with no namespace is still correctly denied under the allowlist
+    assert not p.check_tool(ToolCall(tool="list_pods"))[0]

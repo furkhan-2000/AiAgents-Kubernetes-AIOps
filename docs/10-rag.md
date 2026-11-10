@@ -313,7 +313,7 @@ model/GPU — not worth it here. The simple hit-rate/precision check is enough.
 ### "Do we hand-write every eval case?" — ours yes, prod no
 
 For **this project** we hand-write the set (`eval/rag_eval_set.yaml`) and that's correct:
-we retrieve **tool names**, and there are only ~17 tools, so a dozen-to-fifty cases
+we retrieve **tool names**, and there are only ~34 read-only tools, so a dozen-to-fifty cases
 cover the whole space. No document corpus → nothing to auto-generate.
 
 For a **big document-RAG** (hundreds of PDFs / many sources) you do **not** type

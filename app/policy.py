@@ -11,7 +11,11 @@ _READ_ONLY_VERBS = {"get", "describe", "logs", "top"}
 # Tools / resources that are cluster-scoped (no namespace). The namespace allowlist
 # does not apply to these; they must not be wrongly denied when it is configured.
 _CLUSTER_SCOPED_TOOLS = {"list_all_pods", "list_nodes", "describe_node",
-                         "top_nodes", "list_namespaces"}
+                         "top_nodes", "list_namespaces",
+                         # cluster-scoped metadata/storage tools: they take NO namespace,
+                         # so a configured namespace allowlist must not deny them.
+                         "get_version", "cluster_info", "get_api_resources", "get_crds",
+                         "get_component_statuses", "list_storageclasses"}
 _CLUSTER_SCOPED_RESOURCES = {"nodes", "namespaces", "persistentvolumes",
                              "storageclasses", "componentstatuses"}
 

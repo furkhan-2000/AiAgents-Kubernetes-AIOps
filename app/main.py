@@ -1,5 +1,6 @@
-"""FastAPI app. Routes: /healthz, POST /query, POST /investigate. Pipeline:
-auth -> llm (Ollama) -> policy (allowlist) -> executor (kubectl) -> audit."""
+"""FastAPI app. Routes: /healthz, POST /ask (LLM router -> query|investigate),
+POST /query, POST /investigate. Pipeline: auth -> llm (Ollama) -> policy (allowlist)
+-> executor (kubectl) -> audit."""
 
 import os
 import threading
@@ -163,15 +164,13 @@ def healthz() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/query", response_model=QueryResponse)
-@limiter.limit("10/minute")
-def query(request: Request, req: QueryRequest, caller: str = Depends(verify)) -> QueryResponse:
-    audit("request.received", caller=caller, question=req.q)
-
+def _run_query(q: str, caller: str) -> QueryResponse:
+    """The single-command pipeline: LLM interpret -> policy -> execute -> redact.
+    Shared by the /query endpoint and the /ask router. A non-understood or denied
+    question returns allowed=False (so /ask can fall back to the investigate loop)."""
     # 1. LLM interprets the question into a structured action (suggestion only).
-    # Bounded timeout so a /query cannot hold a worker for the full Ollama budget.
     try:
-        action = llm.interpret(req.q, timeout=_QUERY_TIMEOUT)
+        action = llm.interpret(q, timeout=_QUERY_TIMEOUT)
     except LLMError as exc:
         audit("llm.error", caller=caller, error=str(exc))
         return QueryResponse(allowed=False, message="could not understand the request")
@@ -184,25 +183,19 @@ def query(request: Request, req: QueryRequest, caller: str = Depends(verify)) ->
         audit("policy.denied", caller=caller, action=action.model_dump(), reason=reason)
         return QueryResponse(allowed=False, action=action, message=reason)
 
-    # 3. Execute the approved, read-only action. Redact secret-looking output on
-    # this path too (same as the investigate loop).
+    # 3. Execute the approved, read-only action. Redact secret-looking output.
     output = redact(executor.run(action))
     fact = table_facts(output)
     if fact:
         output = f"[EXACT COUNT: {fact}]\n{output}"
     audit("action.executed", caller=caller, action=action.model_dump())
-
     return QueryResponse(allowed=True, action=action, output=output)
 
 
-@app.post("/investigate", response_model=InvestigateResponse)
-@limiter.limit("6/minute")
-def investigate(request: Request, req: InvestigateRequest, caller: str = Depends(verify)) -> InvestigateResponse:
-    """Conversational, multi-step, read-only investigation. The brain runs several
-    read-only tools, then explains in plain English. It never changes the cluster."""
-    audit("investigate.received", caller=caller, question=req.q)
-
-    key = req.q.strip().lower()
+def _run_investigate(q: str, caller: str) -> InvestigateResponse:
+    """The bounded think-act-observe loop, with the short-TTL cache and the single
+    concurrency slot. Shared by the /investigate endpoint and the /ask router."""
+    key = q.strip().lower()
     cached = _cache_get(key)
     if cached is not None:
         audit("investigate.cache_hit", caller=caller)
@@ -215,8 +208,52 @@ def investigate(request: Request, req: InvestigateRequest, caller: str = Depends
             message="The assistant is busy with other investigations. Please retry shortly.",
         )
     try:
-        resp = loop.run(req.q, caller)
+        resp = loop.run(q, caller)
         _cache_put(key, resp)
         return resp
     finally:
         _inflight.release()
+
+
+@app.post("/query", response_model=QueryResponse)
+@limiter.limit("10/minute")
+def query(request: Request, req: QueryRequest, caller: str = Depends(verify)) -> QueryResponse:
+    audit("request.received", caller=caller, question=req.q)
+    return _run_query(req.q, caller)
+
+
+@app.post("/investigate", response_model=InvestigateResponse)
+@limiter.limit("6/minute")
+def investigate(request: Request, req: InvestigateRequest, caller: str = Depends(verify)) -> InvestigateResponse:
+    """Conversational, multi-step, read-only investigation. The brain runs several
+    read-only tools, then explains in plain English. It never changes the cluster."""
+    audit("investigate.received", caller=caller, question=req.q)
+    return _run_investigate(req.q, caller)
+
+
+@app.post("/ask")
+@limiter.limit("6/minute")
+def ask(request: Request, req: QueryRequest, caller: str = Depends(verify)):
+    """Unified entry point: a small, constrained LLM call decides whether the
+    question is a single-fact 'query' or a multi-step 'investigate', then dispatches.
+    The route only picks a PATH; both paths pass the same read-only walls, so a
+    misroute is never unsafe. Belt-and-suspenders: a query that the model can't map
+    falls back to the investigate loop, so nothing is wrongly refused."""
+    audit("request.received", caller=caller, question=req.q)
+
+    # Bounded timeout: the router is a tiny ~1-word call; cap it like /query.
+    try:
+        route = llm.route(req.q, timeout=_QUERY_TIMEOUT)
+    except LLMError:
+        route = "investigate"          # fail-open to the more capable path
+    audit("route.decided", caller=caller, route=route)
+
+    if route == "query":
+        resp = _run_query(req.q, caller)
+        if resp.allowed:
+            return resp
+        # The query path could not map/allow it -> self-correct to investigate.
+        audit("route.fallback", caller=caller, reason=resp.message)
+        return _run_investigate(req.q, caller)
+
+    return _run_investigate(req.q, caller)

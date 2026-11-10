@@ -1,6 +1,6 @@
 # 4. Testing
 
-Two kinds: automated (code) and manual (live). Do both. The suite is **206 tests**
+Two kinds: automated (code) and manual (live). Do both. The suite is **213 tests**
 (should be all green).
 
 ## What the tests cover (bottom = foundation, top = the security gate)

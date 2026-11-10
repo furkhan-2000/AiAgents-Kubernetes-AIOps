@@ -2,6 +2,24 @@
 
 What changed, newest first. Dates are when the work landed.
 
+## 2026-11-10 — LLM router + cluster-metadata tools
+- **LLM routing:** new `POST /ask` endpoint — a small, constrained LLM call (`llm.route`,
+  `num_predict:5`, validated, defaults to `investigate`) decides query-vs-investigate by
+  MEANING, replacing the client's keyword routing that wrongly refused questions with no
+  trigger word (e.g. "what k8s version"). Belt-and-suspenders: a query the model can't map
+  falls back to the investigate loop. Both paths still pass the same 3 read-only walls, so a
+  misroute is never unsafe. `/query` + `/investigate` kept for back-compat; `client/ask.py`
+  thinned to just post `/ask`. Audit: `route.decided`, `route.fallback`.
+- **+18 read-only tools:** cluster metadata (`get_version`, `cluster_info`, `get_api_resources`,
+  `get_crds`, `get_component_statuses`) + workloads (daemonsets/statefulsets/replicasets/jobs/
+  cronjobs/hpa + describes) + networking/storage (networkpolicies/storageclasses/resourcequotas).
+  Wired into tools.py + config (investigation.tools + allowlist); RBAC +componentstatuses.
+  So "which CNI?" → `list_daemonsets` → kindnet. Secrets/configmaps still forbidden.
+- Tests: 213 green (router parse/default, /ask dispatch + fallback, new tools read-only,
+  config-tools-have-builders, cluster-scoped tools pass under a namespace allowlist).
+- Fix: 6 new cluster-scoped metadata tools were missing from policy._CLUSTER_SCOPED_TOOLS
+  (would be denied if allowed_namespaces were ever set); added + regression test.
+
 ## 2026-11-09 — RAG eval KPI (hit-rate/precision → Prometheus/Grafana)
 - Added `eval/rag_eval.py` + `eval/rag_eval_set.yaml`: replays a fixed eval set through
   the LIVE RAG store, computes hit-rate/precision/recall/latency, serves `/metrics`

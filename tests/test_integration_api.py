@@ -83,6 +83,56 @@ def test_investigate_oversized_is_422(client):
     assert r.status_code == 422
 
 
+# ---- /ask: the LLM router decides the path -----------------------------------
+
+def test_ask_routes_to_query(client, monkeypatch):
+    monkeypatch.setattr(main.llm, "route", lambda q, timeout=None: "query")
+    monkeypatch.setattr(main.llm, "interpret",
+        lambda q, timeout=None: Action(verb="get", resource="pods", namespace="kube-system"))
+    monkeypatch.setattr(main.executor, "run", lambda a: "NAME READY\npod 1/1")
+    r = client.post("/ask", json={"q": "how many pods in kube-system"}, headers=AUTH)
+    assert r.status_code == 200
+    assert r.json()["allowed"] is True and "pod" in r.json()["output"]
+
+
+def test_ask_routes_to_investigate(client, monkeypatch):
+    fake = InvestigateResponse(allowed=True, answer="Routed to investigate.", steps=[])
+    monkeypatch.setattr(main.llm, "route", lambda q, timeout=None: "investigate")
+    monkeypatch.setattr(main.loop, "run", lambda q, caller: fake)
+    r = client.post("/ask", json={"q": "why is the web pod restarting"}, headers=AUTH)
+    assert r.status_code == 200 and r.json()["answer"] == "Routed to investigate."
+
+
+def test_ask_query_route_falls_back_to_investigate(client, monkeypatch):
+    """Router said 'query' but the model can't map it (e.g. 'what k8s version').
+    The /ask handler must self-correct to the investigate loop, not refuse."""
+    monkeypatch.setattr(main.llm, "route", lambda q, timeout=None: "query")
+    from app.llm import LLMError
+    def cant(q, timeout=None): raise LLMError("could not interpret")
+    monkeypatch.setattr(main.llm, "interpret", cant)
+    called = {}
+    def fake_loop(q, caller):
+        called["yes"] = True
+        return InvestigateResponse(allowed=True, answer="fell back", steps=[])
+    monkeypatch.setattr(main.loop, "run", fake_loop)
+    r = client.post("/ask", json={"q": "what kubernetes version"}, headers=AUTH)
+    assert r.status_code == 200 and called.get("yes") and r.json()["answer"] == "fell back"
+
+
+def test_ask_router_error_defaults_to_investigate(client, monkeypatch):
+    from app.llm import LLMError
+    def boom(q, timeout=None): raise LLMError("router down")
+    monkeypatch.setattr(main.llm, "route", boom)
+    fake = InvestigateResponse(allowed=True, answer="default path", steps=[])
+    monkeypatch.setattr(main.loop, "run", lambda q, caller: fake)
+    r = client.post("/ask", json={"q": "anything"}, headers=AUTH)
+    assert r.status_code == 200 and r.json()["answer"] == "default path"
+
+
+def test_ask_requires_auth(client):
+    assert client.post("/ask", json={"q": "x"}).status_code in (401, 403)
+
+
 def test_investigate_end_to_end_real_loop(client, monkeypatch):
     """Exercises the REAL loop + policy + executor read-only + redaction on the HTTP
     path (only Ollama and kubectl are mocked), not a stubbed loop.run."""

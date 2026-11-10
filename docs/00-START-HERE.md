@@ -66,8 +66,10 @@ flowchart TB
 - **Observability** (bottom): every VM ships metrics + logs to one monitoring VM.
 - Nothing in either path touches the internet.
 
-## The two ways to ask
+## The two ways to ask (the agent picks for you)
 - **`/query`** — quick facts ("how many pods"). Fast.
 - **`/investigate`** — "why is X broken?". A multi-step loop that explains. Slower.
 
-The `ask` client picks the right one for you automatically.
+The client posts every question to **`/ask`**; a small LLM call in the **agent** routes
+it to the right one by meaning (not keywords), and falls back to `/investigate` if a
+query can't be mapped — so nothing gets wrongly refused.

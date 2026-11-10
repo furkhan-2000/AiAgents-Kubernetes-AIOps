@@ -70,3 +70,25 @@ def test_synthesize_returns_text(monkeypatch):
     monkeypatch.setattr(httpx, "post", _fake_post("The pod is healthy."))
     c = OllamaClient("http://x", "m", 5, brain_prompt="rules")
     assert "healthy" in c.synthesize("q", "evidence")
+
+
+@pytest.mark.parametrize("reply,expected", [
+    ("query", "query"),
+    ("investigate", "investigate"),
+    ("Query.", "query"),            # punctuation/case tolerated
+    ("  investigate\n", "investigate"),
+    ("query because it is a fact", "query"),   # first word wins
+    ("banana", "investigate"),      # unexpected -> safe default
+    ("", "investigate"),            # empty -> safe default
+])
+def test_route_classifies_and_defaults(monkeypatch, reply, expected):
+    monkeypatch.setattr(httpx, "post", _fake_post(reply))
+    c = OllamaClient("http://x", "m", 5)
+    assert c.route("some question") == expected
+
+
+def test_route_llm_error_defaults_investigate(monkeypatch):
+    def boom(url, json=None, timeout=None):
+        raise httpx.ConnectError("down")
+    monkeypatch.setattr(httpx, "post", boom)
+    assert OllamaClient("http://x", "m", 5).route("q") == "investigate"
