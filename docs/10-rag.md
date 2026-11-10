@@ -247,3 +247,65 @@ compact exact form.
 Embedding = meaning-as-numbers. Vector DB = "find the closest numbers, fast." RAG =
 look that up first, then let the model act. Here, what we look up is **which
 read-only tool to run** — and the answer is always computed **live**.
+
+---
+
+## Why there is NO reranker (deliberate, not an oversight)
+
+A **reranker** is a second model (a cross-encoder) that re-scores the top-k retrieved
+items by reading the question and each candidate *together*, then reorders them so the
+most relevant is first. It's a big quality win **for document-RAG at scale** — when you
+retrieve dozens of noisy text passages from a huge corpus and need the best few on top.
+
+We skip it on purpose because this RAG is a different shape:
+- **Tiny corpus** (a few dozen rows) — retrieval is already precise; nothing to re-sort.
+- **We retrieve tool NAMES, not prose** — there's no passage for a cross-encoder to judge.
+- **CPU-only** — a reranker is a second model per query = more latency on an already slow box.
+- **A threshold already does a light version** — `min_similarity: 0.75` + `top_k: 3`
+  drops weak matches, which is "poor-man's reranking" at this scale.
+
+**When to add one:** if this ever retrieves real **document chunks** (runbooks, K8s docs)
+from a large store — then a reranker (e.g. a `bge-reranker` cross-encoder) between
+retrieve and augment is worth it.
+
+## Eval metrics (RAG KPIs) — in plain words
+
+**Think of it as a "metrics-server, but for the RAG instead of the cluster."**
+
+| In Kubernetes | For our RAG |
+|---------------|-------------|
+| `metrics-server` measures pods/nodes (CPU, memory) | an eval script measures the RAG (did it pick the right tool?) |
+| you watch cluster health in Grafana | you watch **answer quality** in Grafana |
+| catches a pod going unhealthy | catches the RAG getting **worse** after a change |
+
+Same idea — **collect numbers → show them on a dashboard** — just a different thing being
+watched. One watches the cluster; the other watches the AI's quality.
+
+### What the numbers mean (simple)
+- **Hit-rate** — out of the test questions, how often did it fetch the **right tool**? (higher = better)
+- **Precision** — of the tools it fetched, how many were actually **useful**? (higher = less noise)
+- **Latency** — how long retrieve + answer took. (lower = faster)
+
+### How it works, end to end
+```mermaid
+flowchart LR
+    E[eval set<br/>question → expected tools] --> R[replay through<br/>the live RAG store]
+    R --> C[compare: got vs expected<br/>compute hit-rate + precision]
+    C --> X[tiny exporter]
+    X --> P[(Prometheus)]
+    P --> G[Grafana panel<br/>RAG quality over time]
+```
+
+1. Keep a fixed **eval set**: a list of `question → the tools that should answer it`.
+2. A small script runs each question through the **real vector store** and sees which tools
+   come back.
+3. It **compares** got-vs-expected → a **hit-rate** and **precision** number. (Pure
+   comparison — **no second AI needed**, so it's cheap and air-gap-safe.)
+4. Push those numbers to **Prometheus** → a **Grafana** panel → you watch RAG quality
+   like any other metric, and spot it dropping after a retrain or config change.
+
+**Why it helps:** it turns "I think the RAG is fine" into a **number you can see and trust**,
+and it alerts you if quality slips. That's the monitoring/KPI the AI side was missing.
+
+**Skip on CPU:** heavier evals (RAGAS, LLM-as-judge for "faithfulness") need a strong
+model/GPU — not worth it here. The simple hit-rate/precision check is enough.

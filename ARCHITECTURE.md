@@ -68,7 +68,7 @@ redundant** re-listing after `list_all_pods`, **retry the final summary once** (
 answer, **cap** output size and total time, and fall back to an honest message if
 it gathers nothing.
 
-**Optional RAG memory** (`app/memory.py`, off by default): before planning, the loop
+**RAG memory** (`app/memory.py`, ON by default, pre-seeded, fail-open): before planning, the loop
 recalls the **tool names** that worked for similar past questions and adds them as a
 hint; after a good answer it remembers the question + tools used. It stores **tool
 names only** (never data), re-injects **no free-text** (no injection surface), is
