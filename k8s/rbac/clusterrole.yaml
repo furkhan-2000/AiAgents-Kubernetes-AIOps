@@ -23,6 +23,7 @@ rules:
       - replicationcontrollers
       - resourcequotas
       - limitranges
+      - componentstatuses
     verbs: ["get", "list", "watch"]
 
   - apiGroups: ["apps"]

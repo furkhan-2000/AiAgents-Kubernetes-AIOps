@@ -48,6 +48,23 @@ investigation:
     - get_ingresses
     - get_pvcs
     - list_namespaces
+    - get_version
+    - cluster_info
+    - get_api_resources
+    - get_crds
+    - get_component_statuses
+    - list_daemonsets
+    - list_statefulsets
+    - list_replicasets
+    - list_jobs
+    - list_cronjobs
+    - list_hpa
+    - describe_daemonset
+    - describe_statefulset
+    - describe_job
+    - list_networkpolicies
+    - list_storageclasses
+    - list_resourcequotas
 
 # RAG memory (/investigate): remembers which READ-ONLY TOOLS answered similar past
 # questions and suggests them, to make the weak model more consistent. Stores tool
@@ -98,6 +115,21 @@ allowlist:
   - { verb: "logs",     resource: "pod" }
   - { verb: "top",      resource: "pods" }
   - { verb: "top",      resource: "nodes" }
+  # workloads + metadata (read-only)
+  - { verb: "get",      resource: "daemonsets" }
+  - { verb: "get",      resource: "statefulsets" }
+  - { verb: "get",      resource: "replicasets" }
+  - { verb: "get",      resource: "jobs" }
+  - { verb: "get",      resource: "cronjobs" }
+  - { verb: "get",      resource: "horizontalpodautoscalers" }
+  - { verb: "get",      resource: "networkpolicies" }
+  - { verb: "get",      resource: "storageclasses" }
+  - { verb: "get",      resource: "resourcequotas" }
+  - { verb: "get",      resource: "customresourcedefinitions" }
+  - { verb: "get",      resource: "componentstatuses" }
+  - { verb: "describe", resource: "daemonset" }
+  - { verb: "describe", resource: "statefulset" }
+  - { verb: "describe", resource: "job" }
 
 # Optional namespace scope. Empty = any namespace allowed. Set to a list (e.g.
 # ["app", "prod-app"]) to restrict BOTH endpoints to those namespaces only, a

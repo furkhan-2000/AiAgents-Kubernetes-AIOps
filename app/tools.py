@@ -33,6 +33,26 @@ CATALOG: dict[str, str] = {
     "get_ingresses":      "List ingresses (external routes/URLs). Omit namespace for ALL namespaces. Args: namespace (optional).",
     "get_pvcs":           "List persistent volume claims (storage). Omit namespace for ALL namespaces. Args: namespace (optional).",
     "list_namespaces":    "List all namespaces. Args: none.",
+    # --- cluster metadata (read-only; answers version/CNI/architecture questions) ---
+    "get_version":        "Kubernetes client+server version. Args: none.",
+    "cluster_info":       "Control-plane + core service endpoints. Args: none.",
+    "get_api_resources":  "All resource types the cluster serves (what is installed/enabled). Args: none.",
+    "get_crds":           "Custom Resource Definitions installed (operators/extensions). Args: none.",
+    "get_component_statuses": "Control-plane component health (etcd, scheduler, controller-manager). Args: none.",
+    # --- more workloads ---
+    "list_daemonsets":    "List daemonsets (node agents: CNI like kindnet, kube-proxy). Omit namespace for ALL. Args: namespace (optional).",
+    "list_statefulsets":  "List statefulsets (stateful apps: DBs, etc.). Omit namespace for ALL. Args: namespace (optional).",
+    "list_replicasets":   "List replicasets (behind deployments). Omit namespace for ALL. Args: namespace (optional).",
+    "list_jobs":          "List jobs (batch). Omit namespace for ALL. Args: namespace (optional).",
+    "list_cronjobs":      "List cronjobs (scheduled). Omit namespace for ALL. Args: namespace (optional).",
+    "list_hpa":           "List horizontal pod autoscalers (autoscaling status). Omit namespace for ALL. Args: namespace (optional).",
+    "describe_daemonset": "Detail + status for one daemonset. Args: namespace, name.",
+    "describe_statefulset":"Detail + status for one statefulset. Args: namespace, name.",
+    "describe_job":       "Detail + status for one job. Args: namespace, name.",
+    # --- networking / storage / limits ---
+    "list_networkpolicies": "List network policies (allowed traffic). Omit namespace for ALL. Args: namespace (optional).",
+    "list_storageclasses":  "List storage classes (storage backends). Args: none.",
+    "list_resourcequotas":  "List resource quotas per namespace. Omit namespace for ALL. Args: namespace (optional).",
 }
 
 
@@ -107,5 +127,45 @@ def build_argv(call: ToolCall, default_ns: str) -> list[str]:
         return ["get", "persistentvolumeclaims", *_ns_scope(call)]
     if tool == "list_namespaces":
         return ["get", "namespaces"]
+
+    # --- cluster metadata (all read-only, cluster-scoped) ---
+    if tool == "get_version":
+        return ["version", "-o", "yaml"]
+    if tool == "cluster_info":
+        return ["cluster-info"]
+    if tool == "get_api_resources":
+        return ["api-resources"]
+    if tool == "get_crds":
+        return ["get", "customresourcedefinitions"]
+    if tool == "get_component_statuses":
+        return ["get", "componentstatuses"]
+
+    # --- more workloads ---
+    if tool == "list_daemonsets":
+        return ["get", "daemonsets", *_ns_scope(call), "-o", "wide"]
+    if tool == "list_statefulsets":
+        return ["get", "statefulsets", *_ns_scope(call), "-o", "wide"]
+    if tool == "list_replicasets":
+        return ["get", "replicasets", *_ns_scope(call), "-o", "wide"]
+    if tool == "list_jobs":
+        return ["get", "jobs", *_ns_scope(call)]
+    if tool == "list_cronjobs":
+        return ["get", "cronjobs", *_ns_scope(call)]
+    if tool == "list_hpa":
+        return ["get", "horizontalpodautoscalers", *_ns_scope(call)]
+    if tool == "describe_daemonset":
+        return ["describe", "daemonset", _needs_name(call), "-n", ns]
+    if tool == "describe_statefulset":
+        return ["describe", "statefulset", _needs_name(call), "-n", ns]
+    if tool == "describe_job":
+        return ["describe", "job", _needs_name(call), "-n", ns]
+
+    # --- networking / storage / limits ---
+    if tool == "list_networkpolicies":
+        return ["get", "networkpolicies", *_ns_scope(call)]
+    if tool == "list_storageclasses":
+        return ["get", "storageclasses"]
+    if tool == "list_resourcequotas":
+        return ["get", "resourcequotas", *_ns_scope(call)]
 
     raise ValueError(f"unknown tool '{tool}'")

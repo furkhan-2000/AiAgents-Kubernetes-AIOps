@@ -4,7 +4,8 @@ import pytest
 from app import tools
 from app.schemas import ToolCall
 
-_READ_ONLY = {"get", "describe", "logs", "top", "events"}
+_READ_ONLY = {"get", "describe", "logs", "top", "events",
+              "version", "cluster-info", "api-resources"}   # discovery verbs: read-only, no object mutation
 _FORBIDDEN = {"delete", "create", "apply", "patch", "edit", "scale", "exec",
               "cp", "drain", "cordon", "replace", "annotate", "label", "rollout"}
 
