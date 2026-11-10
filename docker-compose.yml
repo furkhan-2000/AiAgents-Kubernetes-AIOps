@@ -121,6 +121,8 @@ services:
     restart: unless-stopped
     depends_on: [ollama]
     command: ["python", "-m", "eval.rag_eval", "--serve", "9108"]
+    healthcheck:
+      disable: true                        # the image's /healthz:8080 check doesn't apply here
     networks: [AI-Internal]                # reach Ollama for embeddings
     environment:
       OLLAMA_URL: "http://ollama:11434"
