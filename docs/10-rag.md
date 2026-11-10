@@ -309,3 +309,29 @@ and it alerts you if quality slips. That's the monitoring/KPI the AI side was mi
 
 **Skip on CPU:** heavier evals (RAGAS, LLM-as-judge for "faithfulness") need a strong
 model/GPU — not worth it here. The simple hit-rate/precision check is enough.
+
+### "Do we hand-write every eval case?" — ours yes, prod no
+
+For **this project** we hand-write the set (`eval/rag_eval_set.yaml`) and that's correct:
+we retrieve **tool names**, and there are only ~17 tools, so a dozen-to-fifty cases
+cover the whole space. No document corpus → nothing to auto-generate.
+
+For a **big document-RAG** (hundreds of PDFs / many sources) you do **not** type
+thousands of cases by hand. You scale the ground truth:
+1. **LLM-generated Q&A** — run a model over each chunk: *"write 2 questions this passage
+   answers."* The chunk it came from is the expected source → instant hundreds of
+   `question → chunk` pairs. This is the main method.
+2. **Mine real user logs** — actual questions asked + which docs were clicked / thumbed-up
+   become free, realistic ground truth.
+3. **A small human "golden set"** — you still hand-curate ~50–100 critical cases, but only
+   the important ones, not the whole corpus.
+4. **Frameworks** — RAGAS / LlamaIndex can auto-generate a test set from your documents.
+
+```
+docs → chunk → embed → store                (ingestion)
+docs → LLM writes Q&A pairs → eval set       (auto-generated ground truth)
+run eval → hit-rate / faithfulness → Grafana (the KPI)
+```
+
+**Rule of thumb:** small tool-RAG → write the set by hand (what we did). Large doc-RAG →
+auto-generate the bulk with an LLM + mine user logs, hand-curate only a small golden set.
