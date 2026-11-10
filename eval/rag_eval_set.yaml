@@ -1,0 +1,17 @@
+# RAG eval set: question -> the read-only tool(s) that SHOULD answer it.
+# Deterministic ground truth. The eval replays each question through the live RAG
+# store and checks whether recall() returns the expected tool(s). No LLM judge.
+# Keep tools to real allowlist names (app/tools.py CATALOG).
+cases:
+  - { q: "are all pods up and running",                 expect: [list_all_pods] }
+  - { q: "how many pods are running in the cluster",     expect: [list_all_pods] }
+  - { q: "why is a pod crashing or restarting",          expect: [describe_pod, get_logs] }
+  - { q: "what is wrong with a pod",                     expect: [describe_pod, get_events] }
+  - { q: "show recent events in a namespace",            expect: [get_events] }
+  - { q: "node cpu and memory usage",                    expect: [top_nodes] }
+  - { q: "why is a service unreachable or has no endpoints", expect: [list_services, get_endpoints] }
+  - { q: "storage and persistent volume claims",         expect: [get_pvcs] }
+  - { q: "is a deployment ready",                        expect: [list_deployments] }
+  - { q: "show the logs of a pod",                       expect: [get_logs] }
+  - { q: "list the nodes in the cluster",                expect: [list_nodes] }
+  - { q: "is the cluster healthy overall",               expect: [list_all_pods, list_nodes] }
