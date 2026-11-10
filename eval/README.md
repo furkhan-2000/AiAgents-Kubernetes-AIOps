@@ -16,12 +16,19 @@ On ai-dev — run it inside the agent image (has the deps + the RAG store):
 ```bash
 docker run --rm --network AI-Internal \
   -e OLLAMA_URL=http://ollama:11434 \
-  -v agent_memory:/app/memory \
+  -v aiagents-kubernetes-aiops_agent_memory:/app/memory \
   -v "$PWD/eval:/app/eval:ro" \
   -v "$PWD/config.yaml:/app/config.yaml:ro" \
   agent:1.0 python -m eval.rag_eval --print
 # -> cases=12 hit_rate=0.92 precision=0.80 recall=0.88 avg_latency=0.15s errors=0
 ```
+> IMPORTANT: the standalone `docker run` must use the **project-qualified** volume name
+> `aiagents-kubernetes-aiops_agent_memory`, NOT bare `agent_memory`. Compose prefixes
+> volumes with the project dir; a bare name creates a NEW EMPTY volume, so the eval reads
+> 0 rows → hit_rate 0. Confirm the real name with:
+> `docker inspect agent -f '{{range .Mounts}}{{.Name}}{{end}}' | grep memory`.
+> (The compose sidecar below is fine with bare `agent_memory` — it runs in the SAME
+> compose project, so Compose resolves it to the project-qualified volume automatically.)
 
 ## Live monitoring (exporter + existing OTel path — NO new firewall rule)
 

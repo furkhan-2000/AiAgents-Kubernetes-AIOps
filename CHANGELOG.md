@@ -2,6 +2,17 @@
 
 What changed, newest first. Dates are when the work landed.
 
+## 2026-11-09 — RAG eval KPI (hit-rate/precision → Prometheus/Grafana)
+- Added `eval/rag_eval.py` + `eval/rag_eval_set.yaml`: replays a fixed eval set through
+  the LIVE RAG store, computes hit-rate/precision/recall/latency, serves `/metrics`
+  (deterministic, no LLM judge, air-gap-safe). Baked into the image (`COPY eval ./eval`).
+- Added `rag-eval` sidecar to `docker-compose.yml` (serves `127.0.0.1:9108`); the ai-dev
+  OTel collector scrapes it and ships via the existing remote-write path → Grafana KPI,
+  no new firewall rule. Measured live: hit-rate 0.92, recall 0.92, latency 0.06s.
+- Docs: `docs/11-rag-eval-and-interview.md` (eval metrics + interview Q&A + scenarios),
+  `eval/README.md` (setup), `docs/10-rag.md` (why no reranker; eval = "metrics-server for
+  the RAG"; auto-generating eval sets at scale).
+
 ## 2026-11-09 — Investigate-loop robustness + CPU-safe tuning
 - **All-namespace sweep:** investigate LIST/GET tools now search every namespace when
   the model names none (was silently defaulting to `default`, giving wrong

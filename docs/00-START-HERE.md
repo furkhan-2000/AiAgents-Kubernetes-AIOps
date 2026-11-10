@@ -14,6 +14,7 @@ Each guide is short. Every command has a one-line "what it does".
 8. **[08-glossary.md](08-glossary.md)** — every term in plain English.
 9. **[09-faq.md](09-faq.md)** — "I see X → do Y" troubleshooting (check here when stuck).
 10. **[10-rag.md](10-rag.md)** — optional memory that makes the model more consistent (how + why + secure).
+11. **[11-rag-eval-and-interview.md](11-rag-eval-and-interview.md)** — RAG evaluation deep-dive: metrics, KPIs, interview Q&A, real scenarios.
 
 For the full "how it works" deep dive, see **[../ARCHITECTURE.md](../ARCHITECTURE.md)**.
 History of changes: **[../CHANGELOG.md](../CHANGELOG.md)**.

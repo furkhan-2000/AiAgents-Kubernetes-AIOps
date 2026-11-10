@@ -303,7 +303,7 @@ AiAgents-Kubernetes-AIOps/
     monitoring/                    # Prometheus+Loki+Grafana compose + OTel config
     systemd/warm-models.service    # warm Ollama models on boot
   tests/                           # full pytest suite (incl. test_security_invariants.py)
-  docs/                            # 00-START-HERE .. 10-rag (step-by-step guides)
+  docs/                            # 00-START-HERE .. 11-rag-eval (step-by-step guides)
   config.yaml                      # ollama/model, allowlist, tools, investigation, rag
   CLAUDE.md  ARCHITECTURE.md  CHANGELOG.md
 ```

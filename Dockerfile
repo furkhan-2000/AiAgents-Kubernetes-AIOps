@@ -55,6 +55,8 @@ WORKDIR /app
 COPY config.yaml .
 COPY app/OLLAMA_BRAIN.md ./OLLAMA_BRAIN.md
 COPY app ./app
+# RAG eval harness (read-only; used by the optional rag-eval sidecar, not the agent).
+COPY eval ./eval
 
 # Non-root user + writable dir for the RAG memory DB (mounted as a volume at runtime).
 RUN useradd -u 1000 -m agent && mkdir -p /app/memory && chown 1000:1000 /app/memory

@@ -110,3 +110,37 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+  # Optional RAG-quality exporter: replays eval/rag_eval_set.yaml through the live RAG
+  # store and serves hit-rate/precision/recall/latency on :9108/metrics (localhost only).
+  # The ai-dev OTel collector scrapes it and ships via the existing remote-write path, so
+  # it becomes a live KPI in Grafana (no new inbound firewall rule). See eval/README.md.
+  rag-eval:
+    image: agent:1.0                       # same image (has app/ + eval/ + sqlite-vec)
+    container_name: rag-eval
+    restart: unless-stopped
+    depends_on: [ollama]
+    command: ["python", "-m", "eval.rag_eval", "--serve", "9108"]
+    networks: [AI-Internal]                # reach Ollama for embeddings
+    environment:
+      OLLAMA_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "qwen2.5:7b-instruct-q5_K_M"
+    volumes:
+      - "agent_memory:/app/memory"         # the live RAG store (read); same project volume
+    ports:
+      - "127.0.0.1:9108:9108"              # localhost only; OTel scrapes it locally
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
