@@ -29,6 +29,11 @@ networks:
   AI-Agent:
     name: AI-Agent
     external: true          # can reach the Kubernetes cluster / proxy
+  # Tiny private bridge used ONLY so the host OTel collector can scrape the rag-eval
+  # exporter on 127.0.0.1:9108. It does NOT reach the cluster (unlike AI-Agent) and has
+  # no other members, so the eval exporter stays off both the internet and the cluster.
+  rag-metrics:
+    driver: bridge
 
 volumes:
   ollama:
@@ -123,7 +128,10 @@ services:
     command: ["python", "-m", "eval.rag_eval", "--serve", "9108"]
     healthcheck:
       disable: true                        # the image's /healthz:8080 check doesn't apply here
-    networks: [AI-Internal]                # reach Ollama for embeddings
+    # AI-Internal reaches Ollama; rag-metrics (a private bridge, NOT the cluster net) lets
+    # the host publish 127.0.0.1:9108 for OTel to scrape. A container on an internal-only
+    # network cannot publish a host port, so this second, non-cluster bridge is the fix.
+    networks: [AI-Internal, rag-metrics]
     environment:
       OLLAMA_URL: "http://ollama:11434"
       OLLAMA_MODEL: "qwen2.5:7b-instruct-q5_K_M"
