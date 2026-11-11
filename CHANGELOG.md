@@ -2,20 +2,23 @@
 
 What changed, newest first. Dates are when the work landed.
 
-## 2026-11-10 — LLM router + cluster-metadata tools
-- **LLM routing:** new `POST /ask` endpoint — a small, constrained LLM call (`llm.route`,
-  `num_predict:5`, validated, defaults to `investigate`) decides query-vs-investigate by
-  MEANING, replacing the client's keyword routing that wrongly refused questions with no
-  trigger word (e.g. "what k8s version"). Belt-and-suspenders: a query the model can't map
-  falls back to the investigate loop. Both paths still pass the same 3 read-only walls, so a
-  misroute is never unsafe. `/query` + `/investigate` kept for back-compat; `client/ask.py`
-  thinned to just post `/ask`. Audit: `route.decided`, `route.fallback`.
+## 2026-11-10 — Unified `/ask` routing (keyword + fallback) + cluster-metadata tools
+- **Routing moved into the agent:** new `POST /ask` endpoint. A **fast keyword check**
+  (`main._keyword_route` — NO extra model call, so zero added latency on CPU) picks
+  query vs investigate; a fact the model can't map **falls back** to the investigate loop,
+  so questions with no trigger word (e.g. "what k8s version") answer instead of being
+  refused. (An LLM-based router was tried and reverted — on CPU the extra model call added
+  latency and sometimes misrouted simple questions to the slow path.) Both paths pass the
+  same 3 read-only walls, so routing never affects safety. `/query` + `/investigate` kept
+  for back-compat; `client/ask.py` thinned to just post `/ask`. Audit: `route.decided`,
+  `route.fallback`.
 - **+18 read-only tools:** cluster metadata (`get_version`, `cluster_info`, `get_api_resources`,
   `get_crds`, `get_component_statuses`) + workloads (daemonsets/statefulsets/replicasets/jobs/
   cronjobs/hpa + describes) + networking/storage (networkpolicies/storageclasses/resourcequotas).
   Wired into tools.py + config (investigation.tools + allowlist); RBAC +componentstatuses.
   So "which CNI?" → `list_daemonsets` → kindnet. Secrets/configmaps still forbidden.
-- Tests: 213 green (router parse/default, /ask dispatch + fallback, new tools read-only,
+- Tests: 213 green (keyword-route classification, /ask fact→query / why→investigate /
+  unmapped+denied→fallback / no-fallback-when-query-succeeds, new tools read-only,
   config-tools-have-builders, cluster-scoped tools pass under a namespace allowlist).
 - Fix: 6 new cluster-scoped metadata tools were missing from policy._CLUSTER_SCOPED_TOOLS
   (would be denied if allowed_namespaces were ever set); added + regression test.

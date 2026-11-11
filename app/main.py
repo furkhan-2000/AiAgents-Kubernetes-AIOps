@@ -1,6 +1,6 @@
-"""FastAPI app. Routes: /healthz, POST /ask (LLM router -> query|investigate),
-POST /query, POST /investigate. Pipeline: auth -> llm (Ollama) -> policy (allowlist)
--> executor (kubectl) -> audit."""
+"""FastAPI app. Routes: /healthz, POST /ask (keyword router + fallback -> query|
+investigate), POST /query, POST /investigate. Pipeline: auth -> llm (Ollama) ->
+policy (allowlist) -> executor (kubectl) -> redact -> counts -> audit."""
 
 import os
 import threading
@@ -231,21 +231,35 @@ def investigate(request: Request, req: InvestigateRequest, caller: str = Depends
     return _run_investigate(req.q, caller)
 
 
+# Keyword routing for /ask — deterministic and INSTANT (no extra LLM call, which is
+# the whole point on a CPU-only box). Reasoning/debugging words go to the loop; plain
+# facts/lists go to the single-command path. A /query that the model cannot map then
+# falls back to the loop, so nothing is wrongly refused. The route only picks a PATH;
+# both paths pass the same three read-only walls, so it never affects safety.
+_INVESTIGATE_HINTS = (
+    "why", "what went wrong", "went wrong", "fail", "failed", "crash", "crashing",
+    "broken", "error", "debug", "investigate", "diagnose", "root cause", "logs",
+    "restart", "not working", "issue", "problem", "event", "events", "healthy",
+    "health", "wrong", "unhealthy", "stuck", "pending", "oom", "evicted",
+)
+
+
+def _keyword_route(question: str) -> str:
+    """Return 'investigate' if the question needs reasoning, else 'query'. Pure
+    string match — no model call, so it adds zero latency."""
+    ql = question.lower()
+    return "investigate" if any(h in ql for h in _INVESTIGATE_HINTS) else "query"
+
+
 @app.post("/ask")
 @limiter.limit("6/minute")
 def ask(request: Request, req: QueryRequest, caller: str = Depends(verify)):
-    """Unified entry point: a small, constrained LLM call decides whether the
-    question is a single-fact 'query' or a multi-step 'investigate', then dispatches.
-    The route only picks a PATH; both paths pass the same read-only walls, so a
-    misroute is never unsafe. Belt-and-suspenders: a query that the model can't map
-    falls back to the investigate loop, so nothing is wrongly refused."""
+    """Unified entry point the client posts to. A fast keyword check picks the path
+    (no extra LLM call); a /query the model can't map falls back to the investigate
+    loop so nothing is wrongly refused. Both paths pass the same read-only walls."""
     audit("request.received", caller=caller, question=req.q)
 
-    # Bounded timeout: the router is a tiny ~1-word call; cap it like /query.
-    try:
-        route = llm.route(req.q, timeout=_QUERY_TIMEOUT)
-    except LLMError:
-        route = "investigate"          # fail-open to the more capable path
+    route = _keyword_route(req.q)
     audit("route.decided", caller=caller, route=route)
 
     if route == "query":

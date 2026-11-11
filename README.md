@@ -14,7 +14,7 @@ standards: air-gapped, least-privilege, defence-in-depth, low blast radius.
 > every command explained in one line.
 >
 > **Deep dive:** see **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full request
-> flow, what every file does, the `/ask` LLM router and the two handlers (`/query` vs
+> flow, what every file does, the `/ask` router (fast keyword match + fallback) and the two handlers (`/query` vs
 > `/investigate`), the three security walls, capabilities & limitations, and
 > plain-language explanations of "fintech-grade" and "air-gapped".
 
@@ -112,11 +112,11 @@ kube API.
 
 ## 2a. Two modes: simple vs investigate
 
-The client posts every question to **`POST /ask`**, where a small LLM call routes it to one of two read-only handlers. Both handlers pass the same gates.
+The client posts every question to **`POST /ask`**, where a fast keyword check (no extra model call) routes it to one of two read-only handlers, falling back from query to investigate if a fact can't be mapped. Both handlers pass the same gates.
 
 | Endpoint | For | What it does |
 |----------|-----|--------------|
-| `POST /ask` | the client's single entry point | A small LLM call decides query vs investigate (by meaning, not keywords); falls back to investigate if a query can't be mapped. |
+| `POST /ask` | the client's single entry point | A fast keyword check (no extra LLM call) routes to query or investigate; a fact the model can't map falls back to investigate so nothing is wrongly refused. |
 | `POST /query` | technical users, one fact | One question becomes one read-only kubectl command. Returns raw output. |
 | `POST /investigate` | anyone, "why did X break?" | The brain runs several read-only tools in a bounded loop, reads the results, and explains in plain English (what is happening, likely cause, suggested next step for a human). |
 
@@ -131,7 +131,7 @@ data, label guesses as guesses, never claim to have changed anything, and say "I
 could not determine this" rather than invent.
 
 The bastion client (`client/ask.py`) is a thin prompt box that posts every question to
-`/ask`; the agent's LLM router decides query vs investigate. The user just types a question.
+`/ask`; the agent keyword-routes to query or investigate (with a fact->investigate fallback). The user just types a question.
 
 ## 3. The request flow (inside the agent)
 
@@ -276,7 +276,7 @@ AiAgents-Kubernetes-AIOps/
   requirements.txt
   .gitignore                 # keeps kubeconfig / certs / tokens out of git
   app/
-    main.py                  # FastAPI /ask (LLM router) + /query + /investigate
+    main.py                  # FastAPI /ask (keyword router + fallback) + /query + /investigate
     auth.py                  # bearer-token check, constant-time, fail-closed
     llm.py                   # calls Ollama: route() + interpret() + loop next_step()/synthesize()
     policy.py                # THE allowlist: verb+resource AND tool-name gates
@@ -452,7 +452,7 @@ pods live in kube-system.
 Current state: the agent speaks plain HTTP on port 443 (TLS is the next hardening
 step). A bare list query with no namespace defaults to **all namespaces**
 (cluster-wide); `default_namespace` applies only to named-object / describe / logs
-calls. The client posts to `/ask` (LLM router); both `/query` (single command) and `/investigate` (multi-step loop) are
+calls. The client posts to `/ask` (keyword router + fallback); both `/query` (single command) and `/investigate` (multi-step loop) are
 live.
 
 ---

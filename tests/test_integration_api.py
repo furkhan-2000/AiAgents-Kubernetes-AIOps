@@ -83,10 +83,10 @@ def test_investigate_oversized_is_422(client):
     assert r.status_code == 422
 
 
-# ---- /ask: the LLM router decides the path -----------------------------------
+# ---- /ask: fast keyword routing + fallback (no extra LLM call) ----------------
 
-def test_ask_routes_to_query(client, monkeypatch):
-    monkeypatch.setattr(main.llm, "route", lambda q, timeout=None: "query")
+def test_ask_keyword_routes_fact_to_query(client, monkeypatch):
+    # A plain fact (no reasoning keyword) -> /query path, answered directly.
     monkeypatch.setattr(main.llm, "interpret",
         lambda q, timeout=None: Action(verb="get", resource="pods", namespace="kube-system"))
     monkeypatch.setattr(main.executor, "run", lambda a: "NAME READY\npod 1/1")
@@ -95,18 +95,20 @@ def test_ask_routes_to_query(client, monkeypatch):
     assert r.json()["allowed"] is True and "pod" in r.json()["output"]
 
 
-def test_ask_routes_to_investigate(client, monkeypatch):
+def test_ask_keyword_routes_why_to_investigate(client, monkeypatch):
+    # A 'why' question -> investigate loop (no /query call made).
     fake = InvestigateResponse(allowed=True, answer="Routed to investigate.", steps=[])
-    monkeypatch.setattr(main.llm, "route", lambda q, timeout=None: "investigate")
+    def no_query(q, timeout=None):
+        raise AssertionError("interpret() must not run for an investigate-keyword question")
+    monkeypatch.setattr(main.llm, "interpret", no_query)
     monkeypatch.setattr(main.loop, "run", lambda q, caller: fake)
     r = client.post("/ask", json={"q": "why is the web pod restarting"}, headers=AUTH)
     assert r.status_code == 200 and r.json()["answer"] == "Routed to investigate."
 
 
 def test_ask_query_route_falls_back_to_investigate(client, monkeypatch):
-    """Router said 'query' but the model can't map it (e.g. 'what k8s version').
-    The /ask handler must self-correct to the investigate loop, not refuse."""
-    monkeypatch.setattr(main.llm, "route", lambda q, timeout=None: "query")
+    """A fact-routed question the model can't map (e.g. "what kubernetes version")
+    must self-correct to the investigate loop, not refuse."""
     from app.llm import LLMError
     def cant(q, timeout=None): raise LLMError("could not interpret")
     monkeypatch.setattr(main.llm, "interpret", cant)
@@ -119,18 +121,44 @@ def test_ask_query_route_falls_back_to_investigate(client, monkeypatch):
     assert r.status_code == 200 and called.get("yes") and r.json()["answer"] == "fell back"
 
 
-def test_ask_router_error_defaults_to_investigate(client, monkeypatch):
-    from app.llm import LLMError
-    def boom(q, timeout=None): raise LLMError("router down")
-    monkeypatch.setattr(main.llm, "route", boom)
-    fake = InvestigateResponse(allowed=True, answer="default path", steps=[])
+def test_ask_denied_query_falls_back_to_investigate(client, monkeypatch):
+    # A fact-routed question that policy denies also falls back (self-correct).
+    monkeypatch.setattr(main.llm, "interpret",
+        lambda q, timeout=None: Action(verb="get", resource="secrets"))  # denied by policy
+    fake = InvestigateResponse(allowed=True, answer="fell back 2", steps=[])
     monkeypatch.setattr(main.loop, "run", lambda q, caller: fake)
-    r = client.post("/ask", json={"q": "anything"}, headers=AUTH)
-    assert r.status_code == 200 and r.json()["answer"] == "default path"
+    r = client.post("/ask", json={"q": "show the cluster secrets config"}, headers=AUTH)
+    assert r.status_code == 200 and r.json()["answer"] == "fell back 2"
+
+
+def test_ask_fact_does_not_fall_back_when_query_succeeds(client, monkeypatch):
+    """Guard the one-directional contract: a successful /query must NOT also run the
+    investigate loop (no double work, no accidental loop)."""
+    monkeypatch.setattr(main.llm, "interpret",
+        lambda q, timeout=None: Action(verb="get", resource="pods", namespace="kube-system"))
+    monkeypatch.setattr(main.executor, "run", lambda a: "NAME READY\npod 1/1")
+    def must_not_run(q, caller):
+        raise AssertionError("investigate loop must not run when /query succeeds")
+    monkeypatch.setattr(main.loop, "run", must_not_run)
+    r = client.post("/ask", json={"q": "how many pods in kube-system"}, headers=AUTH)
+    assert r.status_code == 200 and r.json()["allowed"] is True
 
 
 def test_ask_requires_auth(client):
     assert client.post("/ask", json={"q": "x"}).status_code in (401, 403)
+
+
+@pytest.mark.parametrize("q,expected", [
+    ("how many pods are running", "query"),
+    ("list all services", "query"),
+    ("what kubernetes version", "query"),
+    ("why is the web pod restarting", "investigate"),
+    ("debug the failing deployment", "investigate"),
+    ("is the cluster healthy", "investigate"),
+    ("show me recent events", "investigate"),
+])
+def test_keyword_route_classification(q, expected):
+    assert main._keyword_route(q) == expected
 
 
 def test_investigate_end_to_end_real_loop(client, monkeypatch):

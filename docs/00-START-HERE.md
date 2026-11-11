@@ -70,6 +70,6 @@ flowchart TB
 - **`/query`** — quick facts ("how many pods"). Fast.
 - **`/investigate`** — "why is X broken?". A multi-step loop that explains. Slower.
 
-The client posts every question to **`/ask`**; a small LLM call in the **agent** routes
-it to the right one by meaning (not keywords), and falls back to `/investigate` if a
-query can't be mapped — so nothing gets wrongly refused.
+The client posts every question to **`/ask`**; the **agent** keyword-routes it (fast, no
+extra model call), and falls back to `/investigate` if a fact can't be mapped — so simple
+questions stay fast and nothing gets wrongly refused.

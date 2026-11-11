@@ -50,15 +50,14 @@ The cluster itself enforces **WALL 3** (read-only RBAC) no matter what reaches i
 | **Example** | "how many pods are running" | "why is the web pod restarting in prd" |
 | **Returns** | the kubectl output (+ exact count) | plain-English answer + the evidence steps |
 
-**`POST /ask` (the front door the client uses).** A small, constrained LLM call
-(`llm.route`, ~1 word, defaults to `investigate`) decides which path a question needs —
-by **meaning**, not keywords. This replaced the old client-side keyword routing that
-wrongly refused questions with no trigger word (e.g. "what k8s version"). Guardrails make
-a misroute harmless: the router output is validated (anything unexpected → `investigate`),
-and a `query` the model can't map **falls back** to the investigate loop. Both paths pass
-the **same three read-only walls**, so the route only affects answer quality, never safety.
-`/query` and `/investigate` remain for direct/back-compat use. The bastion `ask` client is
-now thin — it just posts every question to `/ask` and the agent decides.
+**`POST /ask` (the front door the client uses).** A **fast keyword check** (`_keyword_route`
+in `main.py` — NO extra model call, so zero added latency on CPU) picks the path: reasoning/
+debugging words (why, debug, logs, crash, healthy, …) → the investigate loop; plain facts/
+lists → the single-command path. **Fallback:** a fact the model can't map (e.g. "what k8s
+version") is auto-retried on the investigate loop, so nothing is wrongly refused. The route
+only picks a PATH; both paths pass the **same three read-only walls**, so it never affects
+safety. `/query` and `/investigate` remain for direct/back-compat use. The bastion `ask`
+client is thin — it just posts every question to `/ask` and the agent routes.
 
 ### Inside `/investigate` — the think → act → observe loop
 ```
@@ -90,10 +89,10 @@ it improves consistency without ever going stale or escalating privilege. See
 
 | File | Responsibility (single job) |
 |------|------------------------------|
-| `main.py` | The FastAPI app. Wires everything, exposes `/healthz`, `/ask` (LLM router), `/query`, `/investigate`. Holds the rate-limiter, the concurrency cap, the short-TTL cache, and the friendly-error handler. |
+| `main.py` | The FastAPI app. Wires everything, exposes `/healthz`, `/ask` (keyword router + fallback), `/query`, `/investigate`. Holds the rate-limiter, the concurrency cap, the short-TTL cache, and the friendly-error handler. |
 | `auth.py` | Checks the `Authorization: Bearer` token. **Fail-closed** (no/invalid token = rejected), constant-time compare (no timing leak). |
 | `schemas.py` | Pydantic models for every request/response/action/tool-call. Rejects malformed or oversized input before it reaches logic. |
-| `llm.py` | The only file that talks to Ollama. `route()` (for `/ask`), `interpret()` (for `/query`), `next_step()` + `synthesize()` (for the loop). Turns model text into validated structures; any bad model output becomes a clean error, never a crash. |
+| `llm.py` | The only file that talks to Ollama. `interpret()` (for `/query`), `next_step()` + `synthesize()` (for the loop), `embed()` (for RAG). Turns model text into validated structures; any bad model output becomes a clean error, never a crash. (`/ask` routing is a pure keyword match in `main.py`, no model call.) |
 | `policy.py` | **WALL 1 — the safety core.** The allowlist (which read-only verbs/tools are permitted), argument sanitising (blocks injection and flag-injection), and optional namespace scoping. |
 | `tools.py` | The read-only tool catalog. Each tool builds a fixed, read-only `kubectl` argument list. **No tool can create/change/delete — those simply do not exist.** |
 | `executor.py` | **WALL 2.** Runs `kubectl` as an argument array (no shell = no injection). Hard-refuses any non-read-only verb. Caps output size and bounds log reads so a huge result can't exhaust memory. |

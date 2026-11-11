@@ -53,10 +53,10 @@ def _load_token() -> str:
 
 
 def _ask(question: str, token: str) -> None:
-    # The AGENT decides the route (query vs investigate) with a small LLM call; the
-    # client stays dumb and just posts every question to /ask. This fixes the old
-    # keyword routing that wrongly refused questions with no trigger word (e.g.
-    # "what kubernetes version").
+    # The AGENT decides the route: it keyword-routes /ask to query or investigate
+    # (fast, no extra model call) and falls back from query to investigate when a
+    # fact can't be mapped (e.g. "what kubernetes version"). The client stays dumb
+    # and just posts every question to /ask.
     endpoint = "/ask"
     body = json.dumps({"q": question}).encode("utf-8")
     req = urllib.request.Request(

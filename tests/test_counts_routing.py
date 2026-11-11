@@ -1,8 +1,8 @@
 """Deterministic counting + client posts to the agent's unified /ask endpoint.
 
-Routing (query vs investigate) now happens in the AGENT via an LLM call, not in the
-client by keywords, so the client just posts every question to /ask (see app/llm.py
-route() and app/main.py /ask)."""
+Routing (query vs investigate) now happens in the AGENT: a fast keyword check in
+app/main.py (_keyword_route) picks the path, with a query->investigate fallback. The
+client is dumb — it just posts every question to /ask."""
 
 import json
 import pytest

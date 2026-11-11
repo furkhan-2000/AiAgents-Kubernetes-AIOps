@@ -52,8 +52,7 @@ class OllamaClient:
 
     # ----- low-level call ------------------------------------------------------
 
-    def _generate(self, system: str, prompt: str, as_json: bool, timeout: int | None = None,
-                  num_predict: int = 512) -> str:
+    def _generate(self, system: str, prompt: str, as_json: bool, timeout: int | None = None) -> str:
         payload = {
             "model": self._model,
             "system": system,
@@ -65,8 +64,7 @@ class OllamaClient:
                 "temperature": 0.1,     # grounded, low invention
                 "num_ctx": 4096,        # smaller context = ~2x faster CPU prefill; our
                                         # steps are capped so prompts fit
-                "num_predict": num_predict,  # cap output length -> faster CPU generation
-                                             # (router passes a tiny value: ~1 word)
+                "num_predict": 512,     # cap output length -> much faster CPU generation
             },
         }
         if as_json:
@@ -80,30 +78,6 @@ class OllamaClient:
             return resp.json().get("response", "")
         except (httpx.HTTPError, ValueError) as exc:
             raise LLMError(f"ollama call failed: {exc}") from exc
-
-    # ----- router: pick the endpoint for a question ---------------------------
-
-    def route(self, question: str, timeout: int | None = None) -> str:
-        """Classify a question into 'query' (one fact/list) or 'investigate' (why/
-        multi-step). Constrained + validated: anything unexpected, or any error,
-        defaults to 'investigate' (the more capable path). Never trusts free text."""
-        system = (
-            "You route a Kubernetes question to one of two handlers. Reply with ONE "
-            "word only, lowercase, no punctuation:\n"
-            "'query'       - a single fact or list (how many, list, show, get, which, "
-            "what version, status of one thing).\n"
-            "'investigate' - needs reasoning or several steps (why, debug, diagnose, "
-            "root cause, is X healthy, what's wrong, compare/correlate).\n"
-            "If unsure, reply 'investigate'."
-        )
-        try:
-            raw = self._generate(system, f"Question: {question}", as_json=False,
-                                  timeout=timeout, num_predict=5)
-        except LLMError:
-            return "investigate"
-        word = raw.strip().lower().split()[0] if raw.strip() else ""
-        word = word.strip(".,:;\"'`")
-        return "query" if word == "query" else "investigate"
 
     # ----- single-command mode (/query) ---------------------------------------
 

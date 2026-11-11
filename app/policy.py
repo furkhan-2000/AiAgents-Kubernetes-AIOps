@@ -17,7 +17,8 @@ _CLUSTER_SCOPED_TOOLS = {"list_all_pods", "list_nodes", "describe_node",
                          "get_version", "cluster_info", "get_api_resources", "get_crds",
                          "get_component_statuses", "list_storageclasses"}
 _CLUSTER_SCOPED_RESOURCES = {"nodes", "namespaces", "persistentvolumes",
-                             "storageclasses", "componentstatuses"}
+                             "storageclasses", "componentstatuses",
+                             "customresourcedefinitions"}
 
 
 class Policy:
