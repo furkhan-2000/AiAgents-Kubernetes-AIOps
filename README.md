@@ -157,10 +157,10 @@ auditable.
   [4] executor.py  run the real kubectl as an argv array (NO shell, no string
         |          concatenation, so nothing can be injected). Read-only only.
         v
-  [5] counts.py    compute EXACT row counts in code (the LLM must not count),
-        |          on the FULL table before any truncation.
+  [5] redact.py    mask any secret-looking strings in the output (ReDoS-safe).
         v
-  [6] redact.py    mask any secret-looking strings in the output (ReDoS-safe).
+  [6] counts.py    compute EXACT row counts in code (the LLM must not count),
+        |          on the redacted output.
         v
   [7] audit.py     write a JSON line (who, question, action, allowed, result)
         |          to stdout, picked up by the host log pipeline / SIEM.

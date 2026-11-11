@@ -29,8 +29,8 @@ rules → runs `kubectl` (read-only) → the LLM explains the result in plain En
                                │  4. policy.py      is it allowed + safe? (WALL 1)
                                │  5. tools.py       build the kubectl arguments
                                │  6. executor.py    run read-only kubectl (WALL 2) ──▶ proxy ──▶ cluster
-                               │  7. counts.py      compute EXACT numbers in code
-                               │  8. redact.py      mask any secret-looking text
+                               │  7. redact.py      mask any secret-looking text
+                               │  8. counts.py      compute EXACT numbers in code
                                │  9. llm.py ───────▶ Ollama: write the plain answer
                                │ 10. audit.py       log every step (who/what/result)
   plain answer ◀──────────────┘
@@ -65,7 +65,7 @@ now thin — it just posts every question to `/ask` and the agent decides.
   repeat (max_steps, bounded by a time budget):
      model: "next read-only tool?"  ── or "final" to stop
         → policy check (WALL 1)  → build args (tools.py)  → run (executor, WALL 2)
-        → compute exact counts (counts.py)  → redact secrets (redact.py)
+        → redact secrets (redact.py)  → compute exact counts (counts.py)
         → feed the result back to the model as evidence
   then: model writes the final plain-English answer (grounded only in what it saw)
 ```
