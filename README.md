@@ -278,7 +278,7 @@ AiAgents-Kubernetes-AIOps/
   app/
     main.py                  # FastAPI /ask (keyword router + fallback) + /query + /investigate
     auth.py                  # bearer-token check, constant-time, fail-closed
-    llm.py                   # calls Ollama: route() + interpret() + loop next_step()/synthesize()
+    llm.py                   # calls Ollama: interpret() + loop next_step()/synthesize() + embed()
     policy.py                # THE allowlist: verb+resource AND tool-name gates
     executor.py              # runs kubectl as argv; hard read-only verb check
     tools.py                 # read-only tool registry for the investigate loop

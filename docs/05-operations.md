@@ -47,6 +47,32 @@ docker exec ollama ollama ps                                         # is the mo
 docker compose logs agent | grep '"event"'   # every question + action, as JSON
 ```
 
+### What the log events mean (plain English)
+`args` = the tool's inputs (namespace, pod name, etc.).
+
+| Event | Meaning |
+|-------|---------|
+| `request.received` / `investigate.received` | a question arrived (at `/ask`/`/query` / at `/investigate`) |
+| `route.decided` | keyword picked `query` or `investigate` (no LLM call — instant) |
+| `route.fallback` | `/query` couldn't map it → retried as `investigate` |
+| `loop.tool` | the model picked a tool; it ran (read-only kubectl) |
+| `loop.duplicate` | same tool **+ same args** again → blocked |
+| `loop.redundant` | a narrower call for data a broader call already got (e.g. `list_pods` after `list_all_pods`) → blocked |
+| `loop.denied` | the model picked a tool/namespace the policy refused → skipped |
+| `loop.plan_error` | a "pick next tool" model call timed out/failed → that step skipped |
+| `loop.timeout` | the whole loop hit its wall-clock budget → stop and answer with what it has |
+| `loop.final_requested` | the model said "final" → go write the answer |
+| `loop.synth_error` / `loop.synth_retry_ok` / `loop.synth_retry_failed` | the summary call failed / the one retry worked / the retry also failed (honest degrade) |
+| `loop.synth_nonprose` | the model returned JSON instead of prose → fell back to a plain summary |
+| `loop.answer steps:N` | done — answered using N tool steps |
+| `investigate.busy` | one investigation already running (`max_concurrent: 1`) → rejected |
+| `investigate.cache_hit` | same question within 30s → served from cache, zero LLM calls |
+| `rag.recall` / `rag.remember` | RAG read a hint / saved a learned tool-path |
+| `rag.enabled` / `rag.disabled` / `rag.seeded` / `rag.seed_error` | RAG startup: built / off (error) / pre-seeded / seed failed |
+| `llm.action` / `policy.denied` / `action.executed` / `llm.error` | (`/query`) model's action / blocked / ran / model couldn't parse |
+
+**Order:** `request.received → route.decided → [loop.tool × N] → loop.final_requested → summarize → loop.answer`.
+
 ## Add a new read-only tool (3 places, keep in sync)
 1. `app/tools.py` — add to `CATALOG` + `build_argv` (read-only verb only).
 2. `config.yaml` — add its name to `investigation.tools`.

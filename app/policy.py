@@ -16,7 +16,7 @@ _CLUSTER_SCOPED_TOOLS = {"list_all_pods", "list_nodes", "describe_node",
                          # so a configured namespace allowlist must not deny them.
                          "get_version", "cluster_info", "get_api_resources", "get_crds",
                          "get_component_statuses", "list_storageclasses"}
-_CLUSTER_SCOPED_RESOURCES = {"nodes", "namespaces", "persistentvolumes",
+_CLUSTER_SCOPED_RESOURCES = {"nodes", "namespaces", "persistentvolumes", "pvs",
                              "storageclasses", "componentstatuses",
                              "customresourcedefinitions"}
 
