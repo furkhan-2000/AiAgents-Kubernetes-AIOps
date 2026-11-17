@@ -58,7 +58,7 @@ Loki crash→monitoring disk full (≥40GB).
 
 ## Pointers (load on demand only)
 setup→docs/02 · config→docs/03 · test→docs/04 · ops→docs/05 · security→docs/06 ·
-monitoring→docs/07 · faq→docs/09 · rag→docs/10 · deep→ARCHITECTURE.md · history→CHANGELOG.md.
+monitoring→docs/07 · faq→docs/09 · rag→docs/10 · deep→ARCHITECTURE.md.
 
 ## Self-maintenance
 Changed behaviour? Update CLAUDE.md + the doc + a test in the SAME change. Stale > missing.

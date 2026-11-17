@@ -32,10 +32,8 @@ standards: air-gapped, least-privilege, defence-in-depth, low blast radius.
 8. [Setup from scratch](#8-setup-from-scratch)
 9. [Build and run the agent](#9-build-and-run-the-agent)
 10. [Test it end to end](#10-test-it-end-to-end)
-11. [Secrets: what never goes in git](#11-secrets-what-never-goes-in-git)
-12. [Hardening backlog](#12-hardening-backlog)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Glossary](#14-glossary)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Glossary](#12-glossary)
 
 ---
 
@@ -300,7 +298,7 @@ AiAgents-Kubernetes-AIOps/
   tests/                           # full pytest suite (incl. test_security_invariants.py)
   docs/                            # 00-START-HERE .. 11-rag-eval (step-by-step guides)
   config.yaml                      # ollama/model, allowlist, tools, investigation, rag
-  CLAUDE.md  ARCHITECTURE.md  CHANGELOG.md
+  CLAUDE.md  ARCHITECTURE.md
 ```
 
 ---
@@ -451,55 +449,7 @@ live.
 
 ---
 
-## 11. Secrets: what never goes in git
-
-These live only on the VMs and are blocked by `.gitignore`. Never commit them:
-
-- the agent kubeconfig and any `*kubeconfig*` file
-- client certificates and keys (`*.crt`, `*.key`, `*.pem`, CSRs)
-- `AGENT_TOKEN` and any `.env` file
-- WireGuard private keys and PresharedKeys
-
-The admin kubeconfig never leaves the cluster VM. The CA certificate inside the
-kubeconfig is **not** secret (it only verifies the server; we never use
-insecure-skip-tls-verify).
-
-Credential storage today: `/etc/ai-agent/kubeconfig`, mode 600, owned by the
-container uid, read-only mount, disk encrypted at rest. Future: pull a short-lived
-credential from OpenBao/Vault into memory at startup so nothing sensitive touches
-disk.
-
----
-
-## 12. Hardening backlog
-
-In priority order. Items above the line are the near-term work.
-
-1. **TLS on the agent** (it is plain HTTP today, the biggest gap), then mTLS so only
-   the bastion's client cert can connect.
-2. **Cut the AI server's internet** and egress-lock it to the proxy only (final
-   air-gap).
-3. **Block SSH on the AI server** (console access only, nobody logs in normally).
-4. Wazuh agent shipping to a SIEM.
-5. AIDE (file integrity) + ClamAV.
-6. Rootless Docker.
-7. Token/cert issued by OpenBao vault (short-lived) instead of an env var.
-8. Rotate the 30-day Kubernetes client cert on schedule.
-9. Resolve or formally risk-accept the HIGH CVEs in the ollama base image.
-10. Make every IP static.
-
-Client certs cannot be revoked in Kubernetes (there is no CRL), so the mitigation is
-to keep them short-lived and rotate them, and to protect the key (mode 600).
-
-Built (shipped): the investigate/analyse loop (`/investigate`) — a bounded
-think-act-observe loop (read-only tool calls, size and time caps) that synthesises a
-root cause and suggested fix as text only. Also shipped: deterministic counts,
-secret redaction, optional RAG memory. See [CHANGELOG.md](CHANGELOG.md) for the full
-list. Remaining backlog is the TLS/mTLS + Vault + SIEM items above.
-
----
-
-## 13. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
@@ -515,7 +465,7 @@ list. Remaining backlog is the TLS/mTLS + Vault + SIEM items above.
 
 ---
 
-## 14. Glossary
+## 12. Glossary
 
 - **AIOps**: using AI to operate infrastructure. Here, answering operational
   Kubernetes questions. (Not MLOps or LLMOps.)

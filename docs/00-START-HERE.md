@@ -17,7 +17,6 @@ Each guide is short. Every command has a one-line "what it does".
 11. **[11-rag-eval-and-interview.md](11-rag-eval-and-interview.md)** — RAG evaluation deep-dive: metrics, KPIs, interview Q&A, real scenarios.
 
 For the full "how it works" deep dive, see **[../ARCHITECTURE.md](../ARCHITECTURE.md)**.
-History of changes: **[../CHANGELOG.md](../CHANGELOG.md)**.
 
 ## What this is, in 20 seconds
 An **offline** assistant for Kubernetes. You ask in plain English; a **local** AI
