@@ -207,7 +207,10 @@ flowchart LR
       HM["hostmetrics<br/>(VM CPU/RAM/disk/net)"]
       DS["docker_stats<br/>(container CPU/RAM)"]
       FL["filelog<br/>(syslog + container logs)"]
-      HM & DS & FL --> COL["OTel Collector<br/>(non-root)"]
+      COL["OTel Collector<br/>(non-root)"]
+      HM --> COL
+      DS --> COL
+      FL --> COL
     end
     COL -->|remote-write| PR[("Prometheus<br/>metrics")]
     COL -->|OTLP| LK[("Loki<br/>logs")]
