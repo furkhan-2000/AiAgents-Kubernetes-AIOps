@@ -133,6 +133,8 @@ auth, loop, cache, routing, end-to-end API, attack cases). All green (213 tests)
 Each wall is independent. All three must fail for a write to happen — and no
 write-capable tool exists anywhere in the first place.
 
+The allowlist lives in config.yaml, while the tool itself is registered in tools.py; that's just where the tool is defined and knows how to build its command. Before running anything through executor.py, the flow first checks policy.py, which validates the request against that config.yaml allowlist (and a few other checks: read-only verb, safe arguments, allowed namespace). policy.py doesn't "fight" the command; it simply answers yes or no by returning True or False. It runs its checks top to bottom, and the first one that fails hits return False with a reason and stops immediately; it never reaches the final return True, which is only returned if every check passes. The caller (main.py) only proceeds to executor.py when it gets True; on False it stops and returns the reason to the user, so kubectl is never invoked. If a tool clears policy, it moves to execution, and executor.py calls the actual tool from tools.py, which is why the tool must be registered there. In short: if a tool isn't in the config.yaml allowlist, policy.py blocks it, and it never reaches executor.py; and even if it's in the allowlist, policy, and RBAC, executor.py is still a final independent wall that hard-blocks any non read only verb at execution time, so it still can't run.
+
 ---
 
 ## 6. What it CAN do (capabilities)
