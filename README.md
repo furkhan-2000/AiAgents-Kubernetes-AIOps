@@ -1,22 +1,135 @@
-# Kubernetes AIOps Agent
+# Kubernetes AIOps
+### Offline AI-assisted Kubernetes troubleshooting with security-first, read-only execution
 
-An offline, air-gapped AI assistant for Kubernetes. A user asks a plain-English
-question like "how many pods are running in kube-system?" and gets a real answer
-back. Behind the scenes an on-prem LLM reads the question, a strict policy decides
-whether the matching kubectl command is safe, and only read-only commands ever run.
+<p align="center">
+  <strong>Ask questions about your Kubernetes cluster in plain English. Get evidence-backed operational insights without giving an LLM permission to change your infrastructure.</strong>
+</p>
 
-Nothing is sent to the internet. The model runs locally. The agent can never
-create, change, or delete anything in the cluster. This is built to fintech-grade
-standards: air-gapped, least-privilege, defence-in-depth, low blast radius.
+<p align="center">
+  <img src="https://img.shields.io/badge/Kubernetes-1.34-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes 1.34" />
+  <img src="https://img.shields.io/badge/Python-FastAPI-009688?logo=fastapi&logoColor=white" alt="Python FastAPI" />
+  <img src="https://img.shields.io/badge/LLM-Ollama-black?logo=ollama&logoColor=white" alt="Ollama" />
+  <img src="https://img.shields.io/badge/Execution-Read--only-success" alt="Read only execution" />
+  <img src="https://img.shields.io/badge/Deployment-Private%20%2F%20Offline-blue" alt="Private offline deployment" />
+</p>
 
-> **New here? Start with [docs/00-START-HERE.md](docs/00-START-HERE.md)** — a guided,
-> step-by-step setup (prerequisites → setup → config → testing → operations → security),
-> every command explained in one line.
->
-> **Deep dive:** see **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full request
-> flow, what every file does, the `/ask` router (fast keyword match + fallback) and the two handlers (`/query` vs
-> `/investigate`), the three security walls, capabilities & limitations, and
-> plain-language explanations of "fintech-grade" and "air-gapped".
+<p align="center">
+  <a href="docs/00-START-HERE.md"><strong>Quick start</strong></a> ·
+  <a href="ARCHITECTURE.md"><strong>Architecture</strong></a> ·
+  <a href="#security-by-design"><strong>Security model</strong></a> ·
+  <a href="#roadmap"><strong>Roadmap</strong></a>
+</p>
+
+---
+
+## Why this project?
+
+Kubernetes troubleshooting often means jumping between `kubectl`, events, logs, workload state, and monitoring dashboards. This project explores a safer way to make that operational information easier to investigate: ask a question in plain English and let a locally hosted AI model help select from a **fixed catalogue of read-only tools**.
+
+**The central design principle: the LLM proposes; deterministic code validates; Kubernetes RBAC enforces.**
+
+This is an engineering project focused on practical AIOps patterns for private infrastructure, restricted environments, and teams that need to keep operational data under their control.
+
+## What it does
+
+- **Natural-language troubleshooting** — ask about pods, nodes, deployments, services, events, logs, and other supported Kubernetes resources.
+- **Two investigation paths** — use a lightweight query flow for a single fact or a bounded multi-step investigation for “why is this failing?” questions.
+- **Local inference** — run the model with Ollama instead of sending prompts to a hosted AI API.
+- **Evidence-led responses** — feed actual command output back into the investigation and instruct the model to distinguish observed facts from hypotheses.
+- **Operational visibility** — includes a Prometheus, Grafana, and Loki monitoring stack in the infrastructure layout.
+- **Auditable execution** — validate tool requests, redact sensitive-looking output, compute counts in code, and emit structured audit events.
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    U[Engineer] --> VPN[VPN / ZTNA]
+    VPN --> B[Bastion]
+    B --> API[FastAPI AIOps Agent]
+    API <--> LLM[Local LLM via Ollama]
+    API --> P[Policy and Tool Allowlist]
+    P --> E[Read-only Executor]
+    E --> RP[L4 Kubernetes API Proxy]
+    RP --> K8S[Kubernetes API]
+    K8S --> E
+    E --> API
+    API --> R[Evidence-based Response]
+    M[Prometheus / Loki / Grafana] -. operational visibility .-> API
+```
+
+The repository's documented lab uses a VMware-hosted Kind cluster (Kubernetes 1.34), a bastion, an AI host running FastAPI and Ollama, an L4 TCP proxy, and a separate monitoring VM. See [ARCHITECTURE.md](ARCHITECTURE.md) for the detailed network and request flows.
+
+## Security by design
+
+AI is not trusted with cluster permissions. The implementation uses multiple independent controls:
+
+1. **Fixed tool catalogue and policy allowlist** — only explicitly supported read operations are eligible.
+2. **No-shell execution** — commands are assembled as argument arrays rather than passed through a shell.
+3. **Independent executor checks** — the executor rejects disallowed verbs even if an upstream decision is wrong.
+4. **Least-privilege Kubernetes RBAC** — the agent identity is read-only and excludes Secrets and ConfigMaps.
+5. **Input and output safeguards** — validate arguments, redact secret-looking output, limit investigation steps and output size, and record audit events.
+
+> **Important:** This is a read-only assistant, not an autonomous remediation controller. It does not apply manifests, restart workloads, scale deployments, or modify cluster resources.
+
+## Example questions
+
+Try questions such as:
+
+- “How many pods are running in the kube-system namespace?”
+- “Show me pods that are not Ready.”
+- “Why is this deployment not reaching its desired replica count?”
+- “Show recent events for this namespace.”
+- “Summarise the latest logs for this pod.”
+
+The exact answer depends on the resources and tools enabled in the current configuration and on the permissions of the agent's Kubernetes identity.
+
+## Technology
+
+| Area | Components |
+|---|---|
+| API and orchestration | Python, FastAPI |
+| Local model runtime | Ollama |
+| Platform interface | Kubernetes, kubectl, Kubernetes RBAC |
+| Runtime packaging | Docker, Docker Compose |
+| Monitoring stack | Prometheus, Grafana, Loki |
+| Retrieval memory | SQLite-Vec (optional RAG memory) |
+| Quality and safety | Pytest, policy checks, audit logging, output redaction |
+
+## Get started
+
+Start with the guided setup. It covers prerequisites, infrastructure, configuration, deployment, testing, operations, and security.
+
+**[→ Open the step-by-step setup guide](docs/00-START-HERE.md)**
+
+For the full request lifecycle, network topology, security boundaries, and repository walkthrough, see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| `app/` | FastAPI service, LLM integration, policy, executor, tools, investigation loop, audit, and optional memory |
+| `client/` | Lightweight command-line client for submitting questions |
+| `k8s/` | Kind cluster configuration and read-only RBAC manifests |
+| `infra/` | L4 proxy and monitoring infrastructure |
+| `tests/` | Automated tests, including security invariants |
+| `docs/` | Setup, operations, security, and implementation guides |
+| `config.yaml` | Model, allowlist, tools, investigation, and RAG configuration |
+
+## Roadmap
+
+The following are planned areas of development, not claims of already-shipped functionality:
+
+- Correlate Kubernetes events and workload state with Prometheus metrics and Loki logs.
+- Improve incident summaries with clearer evidence, confidence, and source references.
+- Expand automated evaluation for tool selection, response quality, and policy enforcement.
+- Add more deployment profiles and operational guidance for multi-node Kubernetes environments.
+- Explore alert-triggered, read-only incident investigations.
+
+## Project status and scope
+
+This repository is an actively evolving lab and portfolio project. The documented reference environment is based on Kind and Kubernetes 1.34. Review the setup guide and configuration before adapting it to another cluster. Features described in the roadmap are future work unless explicitly documented as implemented.
+
+**Built to explore the intersection of Kubernetes operations, local LLMs, agent workflows, observability, and infrastructure security.**
 
 ---
 
